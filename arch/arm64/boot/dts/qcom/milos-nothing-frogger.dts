@@ -249,8 +249,8 @@
 
 		vreg_l16b: ldo16 {
 			regulator-name = "vreg_l16b";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
+			regulator-min-microvolt = <3304000>;
+			regulator-max-microvolt = <3304000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
@@ -291,8 +291,8 @@
 
 		vreg_l22b: ldo22 {
 			regulator-name = "vreg_l22b";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
+			regulator-min-microvolt = <3304000>;
+			regulator-max-microvolt = <3304000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
