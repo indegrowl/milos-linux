@@ -664,6 +664,17 @@ config DRM_PANEL_NOVATEK_NT37705
 	  display panels, such as the one found in the The Fairphone (Gen. 6)
 	  smartphone.
 
+config DRM_PANEL_NOVATEK_NT37706A
+	tristate "Novatek NT37706A-based DSI panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	select DRM_KMS_HELPER
+	help
+	  Say Y here if you want to enable support for the Novatek NT37706A-based
+	  BOE AMOLED panel found in the Nothing Phone (4a). The panel runs in DSC
+	  video mode at 1224x2720.
+
 config DRM_PANEL_NOVATEK_NT37801
 	tristate "Novatek NT37801/NT37810 AMOLED DSI panel"
 	depends on OF
