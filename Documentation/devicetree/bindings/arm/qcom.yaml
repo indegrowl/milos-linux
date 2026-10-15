@@ -80,6 +80,7 @@ properties:
           - enum:
               - fairphone,fp6
               - nothing,asteroids
+              - nothing,frogger
           - const: qcom,milos
 
       - items:
