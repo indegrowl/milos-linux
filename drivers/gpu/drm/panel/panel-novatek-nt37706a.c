@@ -181,12 +181,6 @@ static int nt37706a_prepare(struct drm_panel *panel)
 		goto err_power_off;
 	}
 
-	ret = mipi_dsi_compression_mode(ctx->dsi, true);
-	if (ret < 0) {
-		dev_err(dev, "Failed to enable compression mode: %d\n", ret);
-		goto err_power_off;
-	}
-
 	return 0;
 
 err_power_off:
