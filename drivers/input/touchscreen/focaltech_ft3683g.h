@@ -21,7 +21,23 @@
 #define FT3683G_READ_DATA_OFF	7
 #define FT3683G_READ_OVERHEAD	9
 
+struct ft3683g_contact {
+	u8 id;
+	bool down;
+	u16 x;
+	u16 y;
+	u8 major;
+};
+
+enum ft3683g_packet {
+	FT3683G_PACKET_TOUCH,		/* contacts were filled in */
+	FT3683G_PACKET_FW_INIT,		/* firmware (re)started: release all */
+	FT3683G_PACKET_IGNORED,		/* pen, debug or unknown event */
+};
+
 size_t ft3683g_build_read(u8 *tx, u8 reg, u16 len);
 int ft3683g_check_read(const u8 *rx, u16 len);
+int ft3683g_parse_touch(const u8 *buf, struct ft3683g_contact *c,
+			unsigned int *n);
 
 #endif

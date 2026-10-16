@@ -111,6 +111,202 @@ static void check_read_bad_crc(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ft3683g_check_read(rx, 1), -EBADMSG);
 }
 
+/* An idle touch report: everything 0xff except the register 0x01 byte */
+static void blank_report(u8 *buf)
+{
+	memset(buf, 0xff, FT3683G_TOUCH_LEN);
+	buf[0] = 0x00;
+}
+
+static void set_record(u8 *buf, int off, const u8 *rec, int len)
+{
+	memcpy(buf + off, rec, len);
+}
+
+static void expect_contact(struct kunit *test, const struct ft3683g_contact *c,
+			   u8 id, bool down, u16 x, u16 y, u8 major)
+{
+	KUNIT_EXPECT_EQ(test, c->id, id);
+	KUNIT_EXPECT_EQ(test, c->down, down);
+	if (down) {
+		KUNIT_EXPECT_EQ(test, c->x, x);
+		KUNIT_EXPECT_EQ(test, c->y, y);
+		KUNIT_EXPECT_EQ(test, c->major, major);
+	}
+}
+
+static const u8 t0_down_612_1360[] = { 0x02, 0x64, 0x05, 0x50, 0x00, 0x0a };
+static const u8 t2_down_612_1360[] = { 0x02, 0x64, 0x05, 0x50, 0x00, 0x0c, 0x0c, 0x00 };
+
+static void parse_t0_one_down(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n = 99;
+
+	blank_report(buf);
+	buf[1] = 0x01;
+	set_record(buf, 2, t0_down_612_1360, 6);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 1);
+	expect_contact(test, &c[0], 0, true, 612, 1360, 10);
+}
+
+static void parse_t0_area_zero(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x01;
+	set_record(buf, 2, t0_down_612_1360, 6);
+	buf[7] = 0x00;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 1);
+	KUNIT_EXPECT_EQ(test, c[0].major, 9);
+}
+
+static void parse_t0_two_one_up(struct kunit *test)
+{
+	static const u8 contact0[] = { 0x82, 0x64, 0x05, 0x50, 0x00, 0x0a };
+	static const u8 up1[] = { 0x40, 0x10, 0x10, 0x20, 0x00, 0x05 };
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x02;
+	set_record(buf, 2, contact0, 6);
+	set_record(buf, 8, up1, 6);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 2);
+	expect_contact(test, &c[0], 0, true, 612, 1360, 10);
+	expect_contact(test, &c[1], 1, false, 0, 0, 0);
+}
+
+static void parse_t0_flag3_released(struct kunit *test)
+{
+	static const u8 rec[] = { 0xc2, 0x64, 0x05, 0x50, 0x00, 0x0a };
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x01;
+	set_record(buf, 2, rec, 6);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 1);
+	expect_contact(test, &c[0], 0, false, 0, 0, 0);
+}
+
+static void parse_t0_too_many(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x0b;
+	set_record(buf, 2, t0_down_612_1360, 6);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), -EINVAL);
+}
+
+static void parse_t0_down_but_zero_count(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x00;
+	set_record(buf, 2, t0_down_612_1360, 6);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), -EINVAL);
+}
+
+static void parse_t0_no_records(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x01;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), -EINVAL);
+}
+
+static void parse_t2_one_down(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x21;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	set_record(buf, 4, t2_down_612_1360, 8);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 1);
+	expect_contact(test, &c[0], 0, true, 612, 1360, 12);
+}
+
+static void parse_t2_subpixel_truncates(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0x21;
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	set_record(buf, 4, t2_down_612_1360, 8);
+	buf[8] = 0x8f;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_TOUCH);
+	KUNIT_ASSERT_EQ(test, n, 1);
+	expect_contact(test, &c[0], 0, true, 612, 1360, 12);
+}
+
+static void parse_t2_bad_count(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[2] = 0x00;
+	buf[3] = 0x00;
+	set_record(buf, 4, t2_down_612_1360, 8);
+	buf[1] = 0x20;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), -EINVAL);
+	buf[1] = 0x2b;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), -EINVAL);
+}
+
+static void parse_fw_init(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n = 99;
+
+	blank_report(buf);
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_FW_INIT);
+	KUNIT_EXPECT_EQ(test, n, 0);
+}
+
+static void parse_pen_ignored(struct kunit *test)
+{
+	struct ft3683g_contact c[FT3683G_MAX_CONTACTS];
+	u8 buf[FT3683G_TOUCH_LEN];
+	unsigned int n;
+
+	blank_report(buf);
+	buf[1] = 0xb1;
+	buf[2] = 0x00;
+	KUNIT_EXPECT_EQ(test, ft3683g_parse_touch(buf, c, &n), FT3683G_PACKET_IGNORED);
+}
+
 static struct kunit_case ft3683g_test_cases[] = {
 	KUNIT_CASE(build_read_chip_id),
 	KUNIT_CASE(build_read_touch),
@@ -122,6 +318,18 @@ static struct kunit_case ft3683g_test_cases[] = {
 	KUNIT_CASE(check_read_bus_high),
 	KUNIT_CASE(check_read_bus_low),
 	KUNIT_CASE(check_read_bad_crc),
+	KUNIT_CASE(parse_t0_one_down),
+	KUNIT_CASE(parse_t0_area_zero),
+	KUNIT_CASE(parse_t0_two_one_up),
+	KUNIT_CASE(parse_t0_flag3_released),
+	KUNIT_CASE(parse_t0_too_many),
+	KUNIT_CASE(parse_t0_down_but_zero_count),
+	KUNIT_CASE(parse_t0_no_records),
+	KUNIT_CASE(parse_t2_one_down),
+	KUNIT_CASE(parse_t2_subpixel_truncates),
+	KUNIT_CASE(parse_t2_bad_count),
+	KUNIT_CASE(parse_fw_init),
+	KUNIT_CASE(parse_pen_ignored),
 	{ }
 };
 
