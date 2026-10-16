@@ -324,8 +324,8 @@
 
 		vreg_l22b: ldo22 {
 			regulator-name = "vreg_l22b";
-			regulator-min-microvolt = <3304000>;
-			regulator-max-microvolt = <3304000>;
+			regulator-min-microvolt = <3296000>;
+			regulator-max-microvolt = <3296000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
