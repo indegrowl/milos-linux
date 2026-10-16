@@ -590,6 +590,28 @@
 	status = "okay";
 };
 
+&spi0 {
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "focaltech,ft3683g";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+
+		interrupts-extended = <&tlmm 19 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 20 GPIO_ACTIVE_LOW>;
+
+		vci-supply = <&vreg_l22b>;
+		vddio-supply = <&vreg_l11b>;
+
+		pinctrl-0 = <&touchscreen_default>;
+		pinctrl-names = "default";
+
+		touchscreen-size-x = <1224>;
+		touchscreen-size-y = <2720>;
+	};
+};
+
 &tlmm {
 	gpio-reserved-ranges = <13 1>, /* Display */
 			       <27 4>, /* Secure, reserved by downstream */
@@ -620,6 +642,13 @@
 		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
+	};
+
+	touchscreen_default: touchscreen-default-state {
+		pins = "gpio19", "gpio20";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
 	};
 };
 
