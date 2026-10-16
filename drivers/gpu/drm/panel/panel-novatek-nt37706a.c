@@ -304,7 +304,8 @@ static int nt37706a_probe(struct mipi_dsi_device *dsi)
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB101010;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_NO_EOT_PACKET |
-			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
+			  MIPI_DSI_CLOCK_NON_CONTINUOUS |
+			  MIPI_DSI_MODE_DSC_ALL_SLICES_IN_PKT;
 
 	ctx->panel.prepare_prev_first = true;
 
@@ -321,7 +322,6 @@ static int nt37706a_probe(struct mipi_dsi_device *dsi)
 	ctx->dsc.dsc_version_major = 1;
 	ctx->dsc.dsc_version_minor = 2;
 
-	/* Vendor uses 2 slices per packet; msm DSI sends one */
 	ctx->dsc.slice_height = 40;
 	ctx->dsc.slice_width = 612;
 	ctx->dsc.slice_count = 1224 / ctx->dsc.slice_width;
