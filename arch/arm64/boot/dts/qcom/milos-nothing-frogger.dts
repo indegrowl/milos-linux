@@ -24,23 +24,7 @@
 	};
 
 	chosen {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-
 		stdout-path = "serial0:115200n8";
-
-		framebuffer0: framebuffer@e3940000 {
-			compatible = "simple-framebuffer";
-			reg = <0x0 0xe3940000 0x0 (2720 * 1224 * 4)>;
-			width = <1224>;
-			height = <2720>;
-			stride = <(1224 * 4)>;
-			format = "a8r8g8b8";
-			interconnects = <&mmss_noc MASTER_MDP QCOM_ICC_TAG_ALWAYS
-					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
-			clocks = <&gcc GCC_DISP_HF_AXI_CLK>;
-		};
 	};
 
 	gpio-keys {
@@ -74,7 +58,7 @@
 		pinctrl-0 = <&oled_dvdd_en_default>;
 		pinctrl-names = "default";
 
-		/* Left on by the bootloader; keep the splash alive until modeset */
+		/* Left on by the bootloader */
 		regulator-boot-on;
 	};
 
@@ -102,10 +86,13 @@
 		};
 
 		/*
-		 * ABL is powering down display and controller if this node is
-		 * not named exactly "splash_region".
+		 * Bootloader splash buffer. ABL leaves the display running only
+		 * when this node is named exactly "splash_region"; under any
+		 * other name it powers display and controller down before
+		 * booting Linux. Handing over a live splash breaks the MDSS
+		 * memory path on this phone, so let ABL turn it off.
 		 */
-		splash_region@e3940000 {
+		splash@e3940000 {
 			reg = <0x0 0xe3940000 0x0 0x2b00000>;
 			no-map;
 		};
