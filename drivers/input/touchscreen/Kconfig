@@ -817,6 +817,21 @@ config TOUCHSCREEN_EDT_FT5X06
 	  To compile this driver as a module, choose M here: the
 	  module will be called edt-ft5x06.
 
+config TOUCHSCREEN_FOCALTECH_FT3683G_PROTO
+	tristate
+	select CRC_CCITT
+
+config TOUCHSCREEN_FOCALTECH_FT3683G_KUNIT_TEST
+	tristate "KUnit tests for the FocalTech FT3683G protocol helpers" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	select TOUCHSCREEN_FOCALTECH_FT3683G_PROTO
+	default KUNIT_ALL_TESTS
+	help
+	  Unit tests for the SPI framing and touch report parsing used by
+	  the FocalTech FT3683G driver.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_RASPBERRYPI_FW
 	tristate "Raspberry Pi's firmware base touch screen support"
 	depends on RASPBERRYPI_FIRMWARE || (RASPBERRYPI_FIRMWARE=n && COMPILE_TEST)
