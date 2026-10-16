@@ -36,7 +36,14 @@ static const struct regulator_bulk_data nt37706a_supplies[] = {
 	{ .supply = "vci" },
 };
 
-static const unsigned int nt37706a_post_on_ms[] = { 2, 2, 10 };
+/* Vendor regulator sleeps in ms, indexed like nt37706a_supplies[] */
+static const struct {
+	unsigned int pre_on, post_on, pre_off, post_off;
+} nt37706a_supply_delays[] = {
+	{ .post_on = 2 },				/* vddio */
+	{ .post_on = 2, .post_off = 7 },		/* dvdd */
+	{ .pre_on = 1, .post_on = 10, .pre_off = 2, .post_off = 2 },	/* vci */
+};
 
 static inline struct nt37706a_panel *to_nt37706a_panel(struct drm_panel *panel)
 {
@@ -48,13 +55,14 @@ static int nt37706a_power_on(struct nt37706a_panel *ctx)
 	int i, ret;
 
 	for (i = 0; i < ARRAY_SIZE(nt37706a_supplies); i++) {
+		fsleep(nt37706a_supply_delays[i].pre_on * 1000);
 		ret = regulator_enable(ctx->supplies[i].consumer);
 		if (ret < 0) {
 			while (--i >= 0)
 				regulator_disable(ctx->supplies[i].consumer);
 			return ret;
 		}
-		msleep(nt37706a_post_on_ms[i]);
+		fsleep(nt37706a_supply_delays[i].post_on * 1000);
 	}
 
 	return 0;
@@ -65,8 +73,9 @@ static void nt37706a_power_off(struct nt37706a_panel *ctx)
 	int i;
 
 	for (i = ARRAY_SIZE(nt37706a_supplies) - 1; i >= 0; i--) {
+		fsleep(nt37706a_supply_delays[i].pre_off * 1000);
 		regulator_disable(ctx->supplies[i].consumer);
-		usleep_range(2000, 3000);
+		fsleep(nt37706a_supply_delays[i].post_off * 1000);
 	}
 }
 
@@ -198,6 +207,8 @@ static int nt37706a_unprepare(struct drm_panel *panel)
 	if (ret < 0)
 		dev_err(&ctx->dsi->dev, "Failed to un-initialize panel: %d\n", ret);
 
+	/* The vendor waits 1-1.5 ms between the off commands and reset */
+	usleep_range(1000, 1500);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	nt37706a_power_off(ctx);
 
