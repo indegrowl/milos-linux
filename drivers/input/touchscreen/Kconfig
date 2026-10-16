@@ -821,6 +821,19 @@ config TOUCHSCREEN_FOCALTECH_FT3683G_PROTO
 	tristate
 	select CRC_CCITT
 
+config TOUCHSCREEN_FOCALTECH_FT3683G
+	tristate "FocalTech FT3683G SPI touchscreen"
+	depends on SPI
+	select TOUCHSCREEN_FOCALTECH_FT3683G_PROTO
+	help
+	  Say Y here if you have a FocalTech FT3683G touchscreen controller
+	  connected over SPI, as found in the Nothing Phone (4a).
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called focaltech_ft3683g.
+
 config TOUCHSCREEN_FOCALTECH_FT3683G_KUNIT_TEST
 	tristate "KUnit tests for the FocalTech FT3683G protocol helpers" if !KUNIT_ALL_TESTS
 	depends on KUNIT
