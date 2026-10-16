@@ -99,6 +99,13 @@
 		regulator-max-microvolt = <2200000>;
 		startup-delay-us = <1000>;
 
+		/*
+		 * WCN6750 iPA supply. Only the wcn6750-pmu consumes it, and
+		 * nothing powers that sequencer up without Bluetooth, so keep
+		 * it on for Wi-Fi (downstream enables it with the WLAN).
+		 */
+		regulator-always-on;
+
 		gpio = <&pmr735b_gpios 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
