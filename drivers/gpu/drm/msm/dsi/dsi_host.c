@@ -1866,6 +1866,18 @@ static int dsi_host_parse_lane_data(struct msm_dsi_host *msm_host,
 	return -EINVAL;
 }
 
+/*
+ * first_line_bpg_offset recommended by DSC 1.2 (and used by the downstream
+ * SDE driver): 12 + floor(0.09 * min(34, slice_height - 8)).
+ */
+static u8 dsi_dsc_v1_2_first_line_bpg_offset(const struct drm_dsc_config *dsc)
+{
+	if (dsc->slice_height < 8)
+		return 2 * (dsc->slice_height - 1);
+
+	return 12 + min_t(int, 34, dsc->slice_height - 8) * 9 / 100;
+}
+
 static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc_config *dsc)
 {
 	int ret;
@@ -1899,8 +1911,11 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	drm_dsc_set_const_params(dsc);
 	drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+	if (dsc->dsc_version_major == 1 && dsc->dsc_version_minor == 2)
+		ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_2_444);
+	else
+		/* DPU supports only pre-SCR DSC 1.1 panels */
+		ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
 	if (ret) {
 		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
 		return ret;
@@ -1908,6 +1923,9 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 
 	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
 	dsc->line_buf_depth = dsc->bits_per_component + 1;
+
+	if (dsc->dsc_version_major == 1 && dsc->dsc_version_minor == 2)
+		dsc->first_line_bpg_offset = dsi_dsc_v1_2_first_line_bpg_offset(dsc);
 
 	return drm_dsc_compute_rc_parameters(dsc);
 }
