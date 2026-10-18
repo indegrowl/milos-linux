@@ -1370,9 +1370,6 @@ int audioreach_set_media_format(struct q6apm_graph *graph,
 	case MODULE_ID_DISPLAY_PORT_SINK:
 		rc = audioreach_display_port_set_media_format(graph, module, cfg);
 		break;
-	case  MODULE_ID_SMECNS_V2:
-		rc = audioreach_set_module_config(graph, module, cfg);
-		break;
 	case MODULE_ID_I2S_SOURCE:
 	case MODULE_ID_I2S_SINK:
 		rc = audioreach_i2s_set_media_format(graph, module, cfg);
@@ -1415,6 +1412,10 @@ int audioreach_set_media_format(struct q6apm_graph *graph,
 	default:
 		rc = 0;
 	}
+
+	/* Static calibration from the topology, for any module that has it */
+	if (!rc && module->data)
+		rc = audioreach_set_module_config(graph, module, cfg);
 
 	return rc;
 }
