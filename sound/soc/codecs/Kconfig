@@ -704,6 +704,25 @@ config SND_SOC_AW88261
 	  boost converter can be adjusted smartly according to
 	  the input amplitude.
 
+config SND_SOC_AW88271
+	tristate "Soc Audio for awinic aw88271"
+	depends on I2C
+	select REGMAP_I2C
+	select GPIOLIB
+	select SND_SOC_AW88395_LIB
+	help
+	  This option enables support for the awinic AW88271 smart
+	  amplifier, as used for the speakers of the Nothing Phone (4a).
+	  The volume is capped in the driver; it is raised only while
+	  ADSP speaker protection is running.
+
+config SND_SOC_AW88271_KUNIT_TEST
+	tristate "KUnit tests for the awinic aw88271 volume cap" if !KUNIT_ALL_TESTS
+	depends on KUNIT && SND_SOC_AW88271
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit tests for the AW88271 volume cap and protection interlock.
+
 config SND_SOC_AW88081
 	tristate "Soc Audio for awinic aw88081/aw88083"
 	depends on I2C
