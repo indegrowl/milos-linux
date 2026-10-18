@@ -175,6 +175,23 @@
 				sound-dai = <&q6apm>;
 			};
 		};
+
+		/* The amplifiers' V/I feedback, for DSP speaker protection */
+		mi2s-capture-dai-link {
+			link-name = "Primary MI2S Capture";
+
+			codec {
+				sound-dai = <&aw88271_0>, <&aw88271_1>;
+			};
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_TX>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
 	};
 
 	wcn6750-pmu {
@@ -766,6 +783,12 @@
 
 	dai@10 {
 		reg = <PRIMARY_MI2S_RX>;
+		clocks = <&q6prmcc LPASS_CLK_ID_PRI_MI2S_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		clock-names = "bclk";
+	};
+
+	dai@11 {
+		reg = <PRIMARY_MI2S_TX>;
 		clocks = <&q6prmcc LPASS_CLK_ID_PRI_MI2S_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
 		clock-names = "bclk";
 	};
