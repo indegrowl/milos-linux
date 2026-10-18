@@ -703,6 +703,12 @@
 	status = "okay";
 };
 
+&remoteproc_mpss {
+	firmware-name = "qcom/milos/nothing/frogger/modem.mbn";
+
+	status = "okay";
+};
+
 &remoteproc_wpss {
 	firmware-name = "qcom/milos/nothing/frogger/wpss.mbn";
 
