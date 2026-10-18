@@ -74,6 +74,18 @@ enum ar_event_types {
  *						APM_SUB_GRAPH_SID_AUDIO_RECORD = 2,
  *						APM_SUB_GRAPH_SID_VOICE_CALL = 3
  *
+ * %AR_TKN_U32_CONTROL_LINK_IID:		Control link ID, unique in the topology
+ *
+ * %AR_TKN_U32_CONTROL_LINK_PEER1_MOD_IID:	Instance ID of the first module
+ * %AR_TKN_U32_CONTROL_LINK_PEER1_MOD_PORT_ID:	Control port of the first module
+ * %AR_TKN_U32_CONTROL_LINK_PEER2_MOD_IID:	Instance ID of the second module
+ * %AR_TKN_U32_CONTROL_LINK_PEER2_MOD_PORT_ID:	Control port of the second module
+ *
+ * %AR_TKN_U32_CONTROL_LINK_INTENT0..3:		Intent IDs carried by the link (0 = none)
+ *
+ * %AR_TKN_U32_CONTROL_LINK_PROP_ID:		Optional extra link property ID
+ * %AR_TKN_U32_CONTROL_LINK_PROP_VALUE:		32-bit value of that property
+ *
  * %AR_TKN_U32_CONTAINER_INSTANCE_ID:		Container Instance ID
  *
  * %AR_TKN_U32_CONTAINER_CAPABILITY_ID:		Container capability ID
@@ -179,6 +191,19 @@ enum ar_event_types {
 #define AR_TKN_U32_SUB_GRAPH_PERF_MODE		3
 #define AR_TKN_U32_SUB_GRAPH_DIRECTION		4
 #define AR_TKN_U32_SUB_GRAPH_SCENARIO_ID	5
+
+/* Control Link Tokens */
+#define AR_TKN_U32_CONTROL_LINK_IID		50
+#define AR_TKN_U32_CONTROL_LINK_PEER1_MOD_IID	51
+#define AR_TKN_U32_CONTROL_LINK_PEER1_MOD_PORT_ID	52
+#define AR_TKN_U32_CONTROL_LINK_PEER2_MOD_IID	53
+#define AR_TKN_U32_CONTROL_LINK_PEER2_MOD_PORT_ID	54
+#define AR_TKN_U32_CONTROL_LINK_INTENT0		55
+#define AR_TKN_U32_CONTROL_LINK_INTENT1		56
+#define AR_TKN_U32_CONTROL_LINK_INTENT2		57
+#define AR_TKN_U32_CONTROL_LINK_INTENT3		58
+#define AR_TKN_U32_CONTROL_LINK_PROP_ID		59
+#define AR_TKN_U32_CONTROL_LINK_PROP_VALUE	60
 
 /* Container Tokens */
 #define AR_TKN_U32_CONTAINER_INSTANCE_ID	100

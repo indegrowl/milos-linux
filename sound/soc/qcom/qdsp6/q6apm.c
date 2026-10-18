@@ -87,10 +87,32 @@ static struct audioreach_graph *q6apm_get_audioreach_graph(struct q6apm *apm, ui
 
 	kref_init(&graph->refcount);
 
-	q6apm_send_cmd_sync(apm, graph->graph, 0);
+	graph->open_status = q6apm_send_cmd_sync(apm, graph->graph, 0);
 
 	return graph;
 }
+
+/**
+ * q6apm_graph_ctrl_links_ok() - Graph has control links and the DSP accepted them
+ * @graph: the graph
+ *
+ * Control links are sent with APM_CMD_GRAPH_OPEN, so they are configured when
+ * the graph has any and the open succeeded.
+ */
+bool q6apm_graph_ctrl_links_ok(struct q6apm_graph *graph)
+{
+	struct audioreach_sub_graph *sg;
+	int num_links = 0;
+
+	if (!graph || !graph->ar_graph || graph->ar_graph->open_status)
+		return false;
+
+	list_for_each_entry(sg, &graph->info->sg_list, node)
+		num_links += sg->num_control_links;
+
+	return num_links > 0;
+}
+EXPORT_SYMBOL_GPL(q6apm_graph_ctrl_links_ok);
 
 static int audioreach_graph_mgmt_cmd(struct audioreach_graph *graph, uint32_t opcode)
 {

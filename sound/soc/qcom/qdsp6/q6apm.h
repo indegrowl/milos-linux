@@ -87,6 +87,7 @@ struct audioreach_graph {
 	uint32_t id;
 	int state;
 	int start_count;
+	int open_status;	/* result of APM_CMD_GRAPH_OPEN */
 	/* Cached Graph data */
 	void *graph;
 	struct kref refcount;
@@ -120,6 +121,7 @@ int q6apm_graph_prepare(struct q6apm_graph *graph);
 int q6apm_graph_start(struct q6apm_graph *graph);
 int q6apm_graph_stop(struct q6apm_graph *graph);
 int q6apm_graph_flush(struct q6apm_graph *graph);
+bool q6apm_graph_ctrl_links_ok(struct q6apm_graph *graph);
 
 /* Media Format */
 int q6apm_graph_media_format_pcm(struct q6apm_graph *graph,
