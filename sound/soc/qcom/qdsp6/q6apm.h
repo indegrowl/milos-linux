@@ -68,6 +68,11 @@ struct q6apm {
 	struct idr sub_graphs_idr;
 	struct idr containers_idr;
 	struct idr modules_idr;
+
+	/* debugfs: Awinic speaker protection mailbox readback */
+	struct dentry *debugfs;
+	u8 get_cfg_rsp[256];
+	size_t get_cfg_rsp_len;
 };
 
 struct audio_buffer {

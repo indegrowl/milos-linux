@@ -2,19 +2,23 @@
 // Copyright (c) 2020, Linaro Limited
 
 #include <dt-bindings/soc/qcom,gpr.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/sched.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/apr.h>
 #include <linux/wait.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm.h>
+#include <sound/q6apm-sp.h>
 #include "audioreach.h"
 #include "q6apm.h"
 
@@ -28,6 +32,72 @@ struct apm_graph_mgmt_cmd {
 #define APM_GRAPH_MGMT_PSIZE(p, n) ALIGN(struct_size(p, sub_graph_id_list, n), 8)
 
 static struct q6apm *g_apm;
+
+/*
+ * Speaker protection state. Awinic SKTune runs on the ADSP as a playback
+ * module (SP RX) fed by a V/I feedback module (SP TX) over a control link.
+ */
+#define Q6APM_SP_RX_MODULE_ID		0x10013D01
+#define Q6APM_SP_TX_MODULE_ID		0x10013D00
+#define Q6APM_SP_RX_IID			0x4372
+#define Q6APM_AW_PARAM_MAILBOX		0x10013D2A
+
+static BLOCKING_NOTIFIER_HEAD(q6apm_sp_nh);
+static DEFINE_MUTEX(q6apm_sp_lock);
+static bool q6apm_sp_rx_ok, q6apm_sp_tx_ok;
+static int q6apm_sp_state = Q6APM_SP_INACTIVE;
+
+static void q6apm_sp_update(void)
+{
+	int state;
+
+	mutex_lock(&q6apm_sp_lock);
+	state = (q6apm_sp_rx_ok && q6apm_sp_tx_ok) ? Q6APM_SP_ACTIVE : Q6APM_SP_INACTIVE;
+	if (state == q6apm_sp_state) {
+		mutex_unlock(&q6apm_sp_lock);
+		return;
+	}
+	q6apm_sp_state = state;
+	mutex_unlock(&q6apm_sp_lock);
+
+	blocking_notifier_call_chain(&q6apm_sp_nh, state, NULL);
+}
+
+int q6apm_sp_notifier_register(struct notifier_block *nb)
+{
+	int ret = blocking_notifier_chain_register(&q6apm_sp_nh, nb);
+
+	if (!ret)
+		nb->notifier_call(nb, READ_ONCE(q6apm_sp_state), NULL);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(q6apm_sp_notifier_register);
+
+int q6apm_sp_notifier_unregister(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&q6apm_sp_nh, nb);
+}
+EXPORT_SYMBOL_GPL(q6apm_sp_notifier_unregister);
+
+static bool q6apm_graph_has_module(struct q6apm_graph *graph, uint32_t mid);
+
+/* Track a graph holding one of the protection modules; ok = running and linked */
+static void q6apm_sp_track(struct q6apm_graph *graph, bool ok)
+{
+	bool changed = false;
+
+	if (q6apm_graph_has_module(graph, Q6APM_SP_RX_MODULE_ID)) {
+		q6apm_sp_rx_ok = ok;
+		changed = true;
+	}
+	if (q6apm_graph_has_module(graph, Q6APM_SP_TX_MODULE_ID)) {
+		q6apm_sp_tx_ok = ok;
+		changed = true;
+	}
+	if (changed)
+		q6apm_sp_update();
+}
 
 int q6apm_send_cmd_sync(struct q6apm *apm, const struct gpr_pkt *pkt,
 			uint32_t rsp_opcode)
@@ -806,6 +876,8 @@ int q6apm_graph_close(struct q6apm_graph *graph)
 {
 	struct audioreach_graph *ar_graph = graph->ar_graph;
 
+	q6apm_sp_track(graph, false);
+
 	graph->ar_graph = NULL;
 	kref_put(&ar_graph->refcount, q6apm_put_audioreach_graph);
 	gpr_free_port(graph->port);
@@ -831,6 +903,8 @@ int q6apm_graph_start(struct q6apm_graph *graph)
 
 	ar_graph->start_count++;
 
+	q6apm_sp_track(graph, !ret && q6apm_graph_ctrl_links_ok(graph));
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(q6apm_graph_start);
@@ -841,6 +915,8 @@ int q6apm_graph_stop(struct q6apm_graph *graph)
 
 	if (--ar_graph->start_count > 0)
 		return 0;
+
+	q6apm_sp_track(graph, false);
 
 	return audioreach_graph_mgmt_cmd(ar_graph, APM_CMD_GRAPH_STOP);
 }
@@ -872,6 +948,97 @@ static const struct snd_soc_component_driver q6apm_audio_component = {
 	.remove_order   = SND_SOC_COMP_ORDER_LAST,
 };
 
+static bool q6apm_graph_has_module(struct q6apm_graph *graph, uint32_t mid)
+{
+	return graph && graph->info && __q6apm_find_module_by_mid(graph->apm, graph->info, mid);
+}
+
+static int q6apm_sp_state_show(struct seq_file *s, void *unused)
+{
+	seq_printf(s, "%d rx_ok=%d tx_ok=%d\n", READ_ONCE(q6apm_sp_state),
+		   q6apm_sp_rx_ok, q6apm_sp_tx_ok);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(q6apm_sp_state);
+
+/*
+ * Debug readback from the Awinic SP RX module (Nothing GPL aw882xx_dsp.c):
+ * write "<param-id> [size]" to send a read command for that param through
+ * the mailbox, then fetch the mailbox. Reading returns the raw reply in hex.
+ */
+static ssize_t q6apm_aw_mailbox_write(struct file *file, const char __user *ubuf,
+				      size_t count, loff_t *ppos)
+{
+	struct q6apm *apm = file->private_data;
+	struct apm_module_param_data *pd;
+	unsigned int param_id, size = 64;
+	char buf[32];
+	u32 *hdr;
+	int ret;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+	buf[count] = '\0';
+	if (sscanf(buf, "%x %u", &param_id, &size) < 1 || !size ||
+	    size > sizeof(apm->get_cfg_rsp) - 32 || (size % 4))
+		return -EINVAL;
+
+	/* Read command: { type 1 (cmd), opcode, version 1, reserved[3] } */
+	struct gpr_pkt *cmd __free(kfree) =
+		audioreach_alloc_apm_cmd_pkt(APM_MODULE_PARAM_DATA_SIZE + 24, APM_CMD_SET_CFG, 0);
+	if (IS_ERR(cmd))
+		return PTR_ERR(cmd);
+	pd = (void *)cmd + GPR_HDR_SIZE + APM_CMD_HDR_SIZE;
+	pd->module_instance_id = Q6APM_SP_RX_IID;
+	pd->param_id = Q6APM_AW_PARAM_MAILBOX;
+	pd->param_size = 24;
+	hdr = (u32 *)(pd + 1);
+	hdr[0] = 1;
+	hdr[1] = param_id;
+	hdr[2] = 1;
+	ret = q6apm_send_cmd_sync(apm, cmd, 0);
+	if (ret)
+		return ret;
+
+	struct gpr_pkt *get __free(kfree) =
+		audioreach_alloc_apm_cmd_pkt(APM_MODULE_PARAM_DATA_SIZE + size, APM_CMD_GET_CFG, 0);
+	if (IS_ERR(get))
+		return PTR_ERR(get);
+	pd = (void *)get + GPR_HDR_SIZE + APM_CMD_HDR_SIZE;
+	pd->module_instance_id = Q6APM_SP_RX_IID;
+	pd->param_id = Q6APM_AW_PARAM_MAILBOX;
+	pd->param_size = size;
+	apm->get_cfg_rsp_len = 0;
+	ret = q6apm_send_cmd_sync(apm, get, APM_CMD_RSP_GET_CFG);
+
+	return ret ? ret : count;
+}
+
+static ssize_t q6apm_aw_mailbox_read(struct file *file, char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	struct q6apm *apm = file->private_data;
+	char out[3 * sizeof(apm->get_cfg_rsp) + 2];
+	size_t i, n = 0;
+
+	for (i = 0; i < apm->get_cfg_rsp_len; i++)
+		n += scnprintf(out + n, sizeof(out) - n, "%02x%s", apm->get_cfg_rsp[i],
+			       (i % 16 == 15) ? "\n" : " ");
+	n += scnprintf(out + n, sizeof(out) - n, "\n");
+
+	return simple_read_from_buffer(ubuf, count, ppos, out, n);
+}
+
+static const struct file_operations q6apm_aw_mailbox_fops = {
+	.open = simple_open,
+	.write = q6apm_aw_mailbox_write,
+	.read = q6apm_aw_mailbox_read,
+	.llseek = default_llseek,
+};
+
 static int apm_probe(gpr_device_t *gdev)
 {
 	struct device *dev = &gdev->dev;
@@ -901,6 +1068,10 @@ static int apm_probe(gpr_device_t *gdev)
 
 	q6apm_get_apm_state(apm);
 
+	apm->debugfs = debugfs_create_dir("q6apm", NULL);
+	debugfs_create_file("sp_state", 0444, apm->debugfs, apm, &q6apm_sp_state_fops);
+	debugfs_create_file("aw_mailbox", 0600, apm->debugfs, apm, &q6apm_aw_mailbox_fops);
+
 	ret = snd_soc_register_component(dev, &q6apm_audio_component, NULL, 0);
 	if (ret < 0) {
 		dev_err(dev, "failed to register q6apm: %d\n", ret);
@@ -916,8 +1087,16 @@ static int apm_probe(gpr_device_t *gdev)
 
 static void apm_remove(gpr_device_t *gdev)
 {
+	struct q6apm *apm = dev_get_drvdata(&gdev->dev);
+
+	/* The DSP is gone: no graph is running any more */
+	q6apm_sp_rx_ok = false;
+	q6apm_sp_tx_ok = false;
+	q6apm_sp_update();
+
 	of_platform_depopulate(&gdev->dev);
 	snd_soc_unregister_component(&gdev->dev);
+	debugfs_remove_recursive(apm->debugfs);
 }
 
 struct audioreach_module *q6apm_find_module_by_mid(struct q6apm_graph *graph, uint32_t mid)
@@ -984,6 +1163,14 @@ static int apm_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 		default:
 			break;
 		}
+		break;
+	case APM_CMD_RSP_GET_CFG:
+		/* payload: status, then the param data */
+		apm->get_cfg_rsp_len = min_t(size_t, data->payload_size, sizeof(apm->get_cfg_rsp));
+		memcpy(apm->get_cfg_rsp, data->payload, apm->get_cfg_rsp_len);
+		apm->result.opcode = hdr->opcode;
+		apm->result.status = data->payload_size >= 4 ? *(u32 *)data->payload : 0;
+		wake_up(&apm->wait);
 		break;
 	case APM_CMD_RSP_SHARED_MEM_MAP_REGIONS:
 		apm->result.opcode = hdr->opcode;
