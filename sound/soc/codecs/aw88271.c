@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <sound/pcm_params.h>
+#include <sound/q6apm-sp.h>
 #include <sound/soc.h>
 
 #include "aw88395/aw88395_device.h"
@@ -211,6 +212,41 @@ int aw88271_set_sp_active(struct aw88271 *aw, bool active)
 	mutex_unlock(&aw->lock);
 
 	return ret;
+}
+
+static int aw88271_sp_notify(struct notifier_block *nb, unsigned long state, void *data)
+{
+	struct aw88271 *aw = container_of(nb, struct aw88271, sp_nb);
+
+	aw88271_set_sp_active(aw, state == Q6APM_SP_ACTIVE);
+
+	return NOTIFY_OK;
+}
+
+static void aw88271_sp_unregister(void *data)
+{
+	struct aw88271 *aw = data;
+
+	q6apm_sp_notifier_unregister(&aw->sp_nb);
+}
+
+/*
+ * Follow the ADSP speaker protection state when the platform reports it.
+ * Without it, sp_active stays false and only the unprotected cap applies.
+ */
+static int aw88271_sp_register(struct aw88271 *aw)
+{
+	int ret;
+
+	if (!IS_REACHABLE(CONFIG_SND_SOC_QDSP6_APM))
+		return 0;
+
+	aw->sp_nb.notifier_call = aw88271_sp_notify;
+	ret = q6apm_sp_notifier_register(&aw->sp_nb);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(aw->aw_pa->dev, aw88271_sp_unregister, aw);
 }
 
 static int aw88271_playback_event(struct snd_soc_dapm_widget *w,
@@ -520,6 +556,10 @@ static int aw88271_i2c_probe(struct i2c_client *i2c)
 	ret = devm_add_action_or_reset(dev, aw88271_debugfs_remove, aw->debugfs);
 	if (ret)
 		return ret;
+
+	ret = aw88271_sp_register(aw);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to follow speaker protection state\n");
 
 	dev_info(dev, "AW88271 (0x%04x), channel %u, %s\n", chip_id, channel,
 		 aw->role == AW88271_ROLE_SPEAKER ? "speaker" : "earpiece");

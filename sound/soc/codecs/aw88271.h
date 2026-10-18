@@ -11,6 +11,7 @@
 
 #include <linux/bits.h>
 #include <linux/mutex.h>
+#include <linux/notifier.h>
 #include <linux/workqueue.h>
 
 #include "aw88271-cap.h"
@@ -58,6 +59,7 @@ struct aw88271 {
 	struct mutex lock;		/* protects everything below */
 	struct delayed_work start_work;
 	struct dentry *debugfs;
+	struct notifier_block sp_nb;	/* platform speaker protection state */
 	enum aw88271_role role;
 	unsigned int ctl_vol;		/* 0 (mute) .. AW88271_VOL_CTL_MAX (cap) */
 	u16 txen_cfg;			/* I2STXEN as set by the ACF profile */
