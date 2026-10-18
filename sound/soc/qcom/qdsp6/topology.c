@@ -317,14 +317,17 @@ audioreach_get_module_priv_data(const struct snd_soc_tplg_private *private)
 		mod_array = (struct snd_soc_tplg_vendor_array *)((u8 *)private->array + sz);
 		if (le32_to_cpu(mod_array->type) == SND_SOC_AR_TPLG_MODULE_CFG_TYPE) {
 			struct audioreach_module_priv_data *pdata;
+			/* size is the config data in bytes, not counting the header */
+			size_t len = sizeof(*pdata) + le32_to_cpu(mod_array->size);
 
-			pdata = kzalloc_flex(*pdata, data,
-					     le32_to_cpu(mod_array->size));
+			if (sz + len > le32_to_cpu(private->size))
+				return ERR_PTR(-EINVAL);
+
+			pdata = kzalloc(len, GFP_KERNEL);
 			if (!pdata)
 				return ERR_PTR(-ENOMEM);
 
-			memcpy(pdata, ((u8 *)private->data + sz), struct_size(pdata, data,
-						le32_to_cpu(mod_array->size)));
+			memcpy(pdata, (u8 *)private->data + sz, len);
 			return pdata;
 		}
 
