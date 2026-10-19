@@ -119,6 +119,8 @@ struct q6apm_graph {
 	struct mutex lock;
 	struct audioreach_graph *ar_graph;
 	struct audioreach_graph_info *info;
+	/* Static config of a speaker protection module was acknowledged by the DSP */
+	bool sp_cfg_acked;
 };
 
 /* Graph Operations */

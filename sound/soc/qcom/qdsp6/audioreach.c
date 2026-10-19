@@ -1493,8 +1493,12 @@ int audioreach_set_media_format(struct q6apm_graph *graph,
 	}
 
 	/* Static calibration from the topology, for any module that has it */
-	if (!rc && module->data)
+	if (!rc && module->data) {
 		rc = audioreach_set_module_config(graph, module, cfg);
+		if (!rc && (module->module_id == MODULE_ID_AW_SP_RX ||
+			    module->module_id == MODULE_ID_AW_SP_TX))
+			graph->sp_cfg_acked = true;
+	}
 
 	return rc;
 }

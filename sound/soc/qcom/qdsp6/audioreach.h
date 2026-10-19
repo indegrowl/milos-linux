@@ -69,6 +69,10 @@ struct q6apm_graph;
 #define APM_MMAP_TOKEN_MAP_TYPE_POS_BUF		BIT(16)
 #define APM_MMAP_TOKEN_MAP_TYPE_SHIFT		16
 #define APM_MMAP_TOKEN_CAL			BIT(17)
+
+/* Awinic SKTune speaker protection modules (vendor, built into some ADSP images) */
+#define MODULE_ID_AW_SP_RX			0x10013D01
+#define MODULE_ID_AW_SP_TX			0x10013D00
 /* Module config larger than this is sent out of band */
 #define AUDIOREACH_INBAND_CFG_MAX		2048
 #define APM_CMD_RSP_GET_CFG			0x02001000

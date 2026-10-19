@@ -38,8 +38,6 @@ static struct q6apm *g_apm;
  * Speaker protection state. Awinic SKTune runs on the ADSP as a playback
  * module (SP RX) fed by a V/I feedback module (SP TX) over a control link.
  */
-#define Q6APM_SP_RX_MODULE_ID		0x10013D01
-#define Q6APM_SP_TX_MODULE_ID		0x10013D00
 #define Q6APM_SP_RX_IID			0x4372
 #define Q6APM_AW_PARAM_MAILBOX		0x10013D2A
 
@@ -48,28 +46,33 @@ static DEFINE_MUTEX(q6apm_sp_lock);
 static bool q6apm_sp_rx_ok, q6apm_sp_tx_ok;
 static int q6apm_sp_state = Q6APM_SP_INACTIVE;
 
+/*
+ * Must hold q6apm_sp_lock. Listeners are notified under the lock too, so they
+ * always see transitions in order and never end on a stale ACTIVE.
+ */
 static void q6apm_sp_update(void)
 {
 	int state;
 
-	mutex_lock(&q6apm_sp_lock);
+	lockdep_assert_held(&q6apm_sp_lock);
+
 	state = (q6apm_sp_rx_ok && q6apm_sp_tx_ok) ? Q6APM_SP_ACTIVE : Q6APM_SP_INACTIVE;
-	if (state == q6apm_sp_state) {
-		mutex_unlock(&q6apm_sp_lock);
+	if (state == q6apm_sp_state)
 		return;
-	}
 	q6apm_sp_state = state;
-	mutex_unlock(&q6apm_sp_lock);
 
 	blocking_notifier_call_chain(&q6apm_sp_nh, state, NULL);
 }
 
 int q6apm_sp_notifier_register(struct notifier_block *nb)
 {
-	int ret = blocking_notifier_chain_register(&q6apm_sp_nh, nb);
+	int ret;
 
+	mutex_lock(&q6apm_sp_lock);
+	ret = blocking_notifier_chain_register(&q6apm_sp_nh, nb);
 	if (!ret)
-		nb->notifier_call(nb, READ_ONCE(q6apm_sp_state), NULL);
+		nb->notifier_call(nb, q6apm_sp_state, NULL);
+	mutex_unlock(&q6apm_sp_lock);
 
 	return ret;
 }
@@ -83,21 +86,27 @@ EXPORT_SYMBOL_GPL(q6apm_sp_notifier_unregister);
 
 static bool q6apm_graph_has_module(struct q6apm_graph *graph, uint32_t mid);
 
-/* Track a graph holding one of the protection modules; ok = running and linked */
+/*
+ * Track a graph holding one of the protection modules. ok = started and linked;
+ * the module's calibration must also have been acknowledged by the DSP.
+ */
 static void q6apm_sp_track(struct q6apm_graph *graph, bool ok)
 {
-	bool changed = false;
+	bool rx = q6apm_graph_has_module(graph, MODULE_ID_AW_SP_RX);
+	bool tx = q6apm_graph_has_module(graph, MODULE_ID_AW_SP_TX);
 
-	if (q6apm_graph_has_module(graph, Q6APM_SP_RX_MODULE_ID)) {
+	if (!rx && !tx)
+		return;
+
+	ok = ok && graph->sp_cfg_acked;
+
+	mutex_lock(&q6apm_sp_lock);
+	if (rx)
 		q6apm_sp_rx_ok = ok;
-		changed = true;
-	}
-	if (q6apm_graph_has_module(graph, Q6APM_SP_TX_MODULE_ID)) {
+	if (tx)
 		q6apm_sp_tx_ok = ok;
-		changed = true;
-	}
-	if (changed)
-		q6apm_sp_update();
+	q6apm_sp_update();
+	mutex_unlock(&q6apm_sp_lock);
 }
 
 int q6apm_send_cmd_sync(struct q6apm *apm, const struct gpr_pkt *pkt,
@@ -445,6 +454,8 @@ static int __q6apm_unmap_memory_fixed_region(struct device *dev, unsigned int gr
 	return q6apm_send_cmd_sync(apm, pkt, APM_CMD_SHARED_MEM_UNMAP_REGIONS);
 }
 
+static DEFINE_MUTEX(q6apm_cal_lock);
+
 static int q6apm_match_dais(struct device *dev, const void *data)
 {
 	return of_device_is_compatible(dev->of_node, "qcom,q6apm-dais");
@@ -540,6 +551,9 @@ int q6apm_set_cfg_oob(struct q6apm *apm, const void *data, size_t size)
 	dais = device_find_child(apm->dev, NULL, q6apm_match_dais);
 	if (!dais)
 		return -ENODEV;
+
+	/* One mapping at a time: the map response handle is shared state */
+	guard(mutex)(&q6apm_cal_lock);
 
 	vaddr = dma_alloc_coherent(dais, buf_sz, &iova, GFP_KERNEL);
 	if (!vaddr) {
@@ -1220,9 +1234,11 @@ static void apm_remove(gpr_device_t *gdev)
 	struct q6apm *apm = dev_get_drvdata(&gdev->dev);
 
 	/* The DSP is gone: no graph is running any more */
+	mutex_lock(&q6apm_sp_lock);
 	q6apm_sp_rx_ok = false;
 	q6apm_sp_tx_ok = false;
 	q6apm_sp_update();
+	mutex_unlock(&q6apm_sp_lock);
 
 	of_platform_depopulate(&gdev->dev);
 	snd_soc_unregister_component(&gdev->dev);
