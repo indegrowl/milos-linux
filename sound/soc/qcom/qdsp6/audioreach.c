@@ -895,6 +895,10 @@ static int audioreach_set_module_config(struct q6apm_graph *graph,
 	int size = le32_to_cpu(module->data->size);
 	void *p;
 
+	/* Large calibration does not fit a GPR packet: send it via shared memory */
+	if (size > AUDIOREACH_INBAND_CFG_MAX)
+		return q6apm_set_cfg_oob(graph->apm, module->data->data, size);
+
 	struct gpr_pkt *pkt __free(kfree) = audioreach_alloc_apm_cmd_pkt(size, APM_CMD_SET_CFG, 0);
 	if (IS_ERR(pkt))
 		return PTR_ERR(pkt);

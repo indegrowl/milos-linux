@@ -4,6 +4,7 @@
 #include <dt-bindings/soc/qcom,gpr.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/dma-mapping.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -443,6 +444,135 @@ static int __q6apm_unmap_memory_fixed_region(struct device *dev, unsigned int gr
 
 	return q6apm_send_cmd_sync(apm, pkt, APM_CMD_SHARED_MEM_UNMAP_REGIONS);
 }
+
+static int q6apm_match_dais(struct device *dev, const void *data)
+{
+	return of_device_is_compatible(dev->of_node, "qcom,q6apm-dais");
+}
+
+static int q6apm_cal_map(struct q6apm *apm, u64 iova, size_t buf_sz, uint32_t *handle)
+{
+	struct apm_shared_map_region_payload *region;
+	struct apm_cmd_shared_mem_map_regions *map;
+	int ret;
+
+	struct gpr_pkt *pkt __free(kfree) =
+		audioreach_alloc_apm_cmd_pkt(sizeof(*map) + sizeof(*region),
+					     APM_CMD_SHARED_MEM_MAP_REGIONS, APM_MMAP_TOKEN_CAL);
+	if (IS_ERR(pkt))
+		return PTR_ERR(pkt);
+
+	map = (void *)pkt + GPR_HDR_SIZE;
+	map->mem_pool_id = APM_MEMORY_MAP_SHMEM8_4K_POOL;
+	map->num_regions = 1;
+	/* Offset mode, as the downstream GSL maps calibration memory */
+	map->property_flag = APM_MEMORY_MAP_OFFSET_MODE;
+	region = (void *)map + sizeof(*map);
+	region->shm_addr_lsw = lower_32_bits(iova);
+	region->shm_addr_msw = upper_32_bits(iova);
+	region->mem_size_bytes = buf_sz;
+
+	apm->cal_mem_map_handle = 0;
+	ret = q6apm_send_cmd_sync(apm, pkt, APM_CMD_RSP_SHARED_MEM_MAP_REGIONS);
+	*handle = apm->cal_mem_map_handle;
+	if (!ret && !*handle)
+		ret = -EIO;
+
+	return ret;
+}
+
+static int q6apm_cal_set(struct q6apm *apm, uint32_t handle, size_t size)
+{
+	struct apm_cmd_header *cmd_header;
+
+	struct gpr_pkt *pkt __free(kfree) = audioreach_alloc_apm_cmd_pkt(0, APM_CMD_SET_CFG, 0);
+	if (IS_ERR(pkt))
+		return PTR_ERR(pkt);
+
+	cmd_header = (void *)pkt + GPR_HDR_SIZE;
+	/* In offset mode the payload address is the offset into the mapped region */
+	cmd_header->payload_address_lsw = 0;
+	cmd_header->payload_address_msw = 0;
+	cmd_header->mem_map_handle = handle;
+	cmd_header->payload_size = size;
+
+	return q6apm_send_cmd_sync(apm, pkt, 0);
+}
+
+static int q6apm_cal_unmap(struct q6apm *apm, uint32_t handle)
+{
+	struct apm_cmd_shared_mem_unmap_regions *unmap;
+
+	struct gpr_pkt *pkt __free(kfree) =
+		audioreach_alloc_apm_cmd_pkt(sizeof(*unmap), APM_CMD_SHARED_MEM_UNMAP_REGIONS,
+					     APM_MMAP_TOKEN_CAL);
+	if (IS_ERR(pkt))
+		return PTR_ERR(pkt);
+
+	unmap = (void *)pkt + GPR_HDR_SIZE;
+	unmap->mem_map_handle = handle;
+
+	return q6apm_send_cmd_sync(apm, pkt, APM_CMD_SHARED_MEM_UNMAP_REGIONS);
+}
+
+/**
+ * q6apm_set_cfg_oob() - Send APM_CMD_SET_CFG with the payload in shared memory
+ * @apm: the APM
+ * @data: apm_module_param_data records, as for an in-band SET_CFG
+ * @size: size of @data in bytes
+ *
+ * The GPR channel only carries small packets, so large calibration data goes
+ * through a buffer the DSP reads, as the downstream stack does: map it, send
+ * SET_CFG with its address and map handle, then unmap it. The buffer comes
+ * from the q6apm-dais device, which holds the ADSP's SMMU mapping.
+ */
+int q6apm_set_cfg_oob(struct q6apm *apm, const void *data, size_t size)
+{
+	size_t buf_sz = ALIGN(size, SZ_4K);
+	struct of_phandle_args args;
+	struct device *dais;
+	uint32_t handle;
+	dma_addr_t iova;
+	u64 dsp_addr;
+	void *vaddr;
+	int ret, rc;
+
+	dais = device_find_child(apm->dev, NULL, q6apm_match_dais);
+	if (!dais)
+		return -ENODEV;
+
+	vaddr = dma_alloc_coherent(dais, buf_sz, &iova, GFP_KERNEL);
+	if (!vaddr) {
+		put_device(dais);
+		return -ENOMEM;
+	}
+	memcpy(vaddr, data, size);
+
+	/* The DSP expects the SMMU stream ID in bits 35:32, as for PCM buffers */
+	dsp_addr = iova;
+	if (!of_parse_phandle_with_fixed_args(dais->of_node, "iommus", 1, 0, &args)) {
+		dsp_addr |= (u64)(args.args[0] & 0xf) << 32;
+		of_node_put(args.np);
+	}
+
+	ret = q6apm_cal_map(apm, dsp_addr, buf_sz, &handle);
+	if (!ret) {
+		ret = q6apm_cal_set(apm, handle, size);
+		rc = q6apm_cal_unmap(apm, handle);
+		if (rc) {
+			/* Never free memory the DSP may still have mapped */
+			dev_err(apm->dev, "calibration buffer unmap failed (%d), leaking it\n", rc);
+			put_device(dais);
+			return ret ? ret : rc;
+		}
+	}
+
+	dma_free_coherent(dais, buf_sz, vaddr, iova);
+	put_device(dais);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(q6apm_set_cfg_oob);
 
 int q6apm_unmap_memory_fixed_region(struct device *dev, unsigned int graph_id)
 {
@@ -1147,6 +1277,12 @@ static int apm_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 			wake_up(&apm->wait);
 			break;
 		case APM_CMD_SHARED_MEM_UNMAP_REGIONS:
+			if (hdr->token & APM_MMAP_TOKEN_CAL) {
+				apm->result.opcode = result->opcode;
+				apm->result.status = result->status;
+				wake_up(&apm->wait);
+				break;
+			}
 			apm->result.opcode = hdr->opcode;
 			apm->result.status = 0;
 			rsp = data->payload;
@@ -1176,6 +1312,11 @@ static int apm_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 		apm->result.opcode = hdr->opcode;
 		apm->result.status = 0;
 		rsp = data->payload;
+		if (hdr->token & APM_MMAP_TOKEN_CAL) {
+			apm->cal_mem_map_handle = rsp->mem_map_handle;
+			wake_up(&apm->wait);
+			break;
+		}
 		graph_id = hdr->token & APM_MMAP_TOKEN_GID_MASK;
 		is_pos_buf = hdr->token & APM_MMAP_TOKEN_MAP_TYPE_POS_BUF;
 

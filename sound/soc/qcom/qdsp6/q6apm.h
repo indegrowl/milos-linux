@@ -69,6 +69,9 @@ struct q6apm {
 	struct idr containers_idr;
 	struct idr modules_idr;
 
+	/* Out-of-band SET_CFG for large calibration data */
+	uint32_t cal_mem_map_handle;
+
 	/* debugfs: Awinic speaker protection mailbox readback */
 	struct dentry *debugfs;
 	u8 get_cfg_rsp[256];
@@ -127,6 +130,7 @@ int q6apm_graph_start(struct q6apm_graph *graph);
 int q6apm_graph_stop(struct q6apm_graph *graph);
 int q6apm_graph_flush(struct q6apm_graph *graph);
 bool q6apm_graph_ctrl_links_ok(struct q6apm_graph *graph);
+int q6apm_set_cfg_oob(struct q6apm *apm, const void *data, size_t size);
 
 /* Media Format */
 int q6apm_graph_media_format_pcm(struct q6apm_graph *graph,

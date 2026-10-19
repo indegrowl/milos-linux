@@ -68,6 +68,9 @@ struct q6apm_graph;
 #define APM_MMAP_TOKEN_GID_MASK			GENMASK(15, 0)
 #define APM_MMAP_TOKEN_MAP_TYPE_POS_BUF		BIT(16)
 #define APM_MMAP_TOKEN_MAP_TYPE_SHIFT		16
+#define APM_MMAP_TOKEN_CAL			BIT(17)
+/* Module config larger than this is sent out of band */
+#define AUDIOREACH_INBAND_CFG_MAX		2048
 #define APM_CMD_RSP_GET_CFG			0x02001000
 #define APM_CMD_CLOSE_ALL			0x01001013
 #define APM_CMD_REGISTER_SHARED_CFG		0x0100100A
@@ -115,6 +118,8 @@ struct apm_module_event {
 } __packed;
 
 #define APM_MEMORY_MAP_SHMEM8_4K_POOL		3
+/* property_flag: payload addresses are offsets into the mapped region */
+#define APM_MEMORY_MAP_OFFSET_MODE		BIT(2)
 
 struct apm_cmd_shared_mem_map_regions {
 	uint16_t mem_pool_id;
