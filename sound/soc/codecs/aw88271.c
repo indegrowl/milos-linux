@@ -43,11 +43,23 @@ static unsigned int aw88271_cur_att(struct aw88271 *aw)
 	return aw88271_vol_to_att(aw->ctl_vol, att_min);
 }
 
-/* Must hold aw->lock. Writes the capped volume, whatever the power state. */
+/*
+ * Must hold aw->lock. Writes the capped volume, whatever the power state. If
+ * that fails the amp may still be at a higher level than now allowed, so
+ * hard-mute it instead.
+ */
 static int aw88271_apply_volume(struct aw88271 *aw)
 {
-	return regmap_update_bits(aw->regmap, AW88271_REG_SYSCTRL2, AW88271_VOL_MASK,
-				  aw88271_cur_att(aw));
+	int ret;
+
+	ret = regmap_update_bits(aw->regmap, AW88271_REG_SYSCTRL2, AW88271_VOL_MASK,
+				 aw88271_cur_att(aw));
+	if (ret) {
+		dev_err_ratelimited(aw->aw_pa->dev, "volume write failed (%d), muting\n", ret);
+		regmap_update_bits(aw->regmap, AW88271_REG_SYSCTRL, AW88271_HMUTE, AW88271_HMUTE);
+	}
+
+	return ret;
 }
 
 static int aw88271_sysctrl_bits(struct aw88271 *aw, unsigned int mask, bool set)
