@@ -26,8 +26,8 @@ enum aw88271_role {
 /* Unprotected cap: barely audible */
 #define AW88271_ATT_MIN_1A		380
 /* Caps while protection runs; raised only after it is proven working */
-#define AW88271_ATT_MIN_PROT_SPK	AW88271_ATT_MIN_1A
-#define AW88271_ATT_MIN_PROT_EAR	AW88271_ATT_MIN_1A
+#define AW88271_ATT_MIN_PROT_SPK	AW88271_ATT_STOCK
+#define AW88271_ATT_MIN_PROT_EAR	AW88271_ATT_STOCK
 
 #define AW88271_REG_SYSCTRL		0x04
 #define AW88271_REG_SYSCTRL2		0x05
