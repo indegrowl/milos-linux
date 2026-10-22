@@ -83,7 +83,13 @@ int iris_process_streamon_input(struct iris_inst *inst)
 	if (ret)
 		return ret;
 
-	inst->last_buffer_dequeued = false;
+	/*
+	 * A seek (OUTPUT streamoff/on) does not end a pending drain or
+	 * resolution change: if its LAST buffer is already out, a capture
+	 * buffer queued now must not get a second, synthesized one.
+	 */
+	if (!iris_drain_pending(inst) && !iris_drc_pending(inst))
+		inst->last_buffer_dequeued = false;
 
 	return iris_inst_change_sub_state(inst, 0, set_sub_state);
 }

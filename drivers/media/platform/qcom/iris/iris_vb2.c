@@ -244,6 +244,11 @@ void iris_vb2_stop_streaming(struct vb2_queue *q)
 	if (ret)
 		goto exit;
 
+	/* stopping CAPTURE consumes a LAST buffer that is still pending */
+	if (V4L2_TYPE_IS_CAPTURE(q->type) &&
+	    (iris_drain_pending(inst) || iris_drc_pending(inst)))
+		inst->last_buffer_dequeued = true;
+
 exit:
 	iris_helper_buffers_done(inst, q->type, VB2_BUF_STATE_ERROR);
 	if (ret)
