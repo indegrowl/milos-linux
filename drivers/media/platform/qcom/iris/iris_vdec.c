@@ -526,6 +526,9 @@ int iris_vdec_start_cmd(struct iris_inst *inst)
 		return -EBUSY;
 	}
 
+	/* a later LAST buffer must raise V4L2_EVENT_EOS again */
+	v4l2_m2m_clear_state(inst->m2m_ctx);
+
 	return iris_inst_change_sub_state(inst, clear_sub_state, 0);
 }
 
