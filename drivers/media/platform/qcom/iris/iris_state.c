@@ -60,9 +60,16 @@ int iris_inst_change_state(struct iris_inst *inst,
 		return -EINVAL;
 
 change_state:
-	inst->state = request_state;
 	dev_dbg(inst->core->dev, "state changed from %x to %x\n",
 		inst->state, request_state);
+	inst->state = request_state;
+
+	/*
+	 * A failed session returns no more buffers: wake up clients waiting
+	 * in poll or DQBUF instead of leaving them blocked for good.
+	 */
+	if (request_state == IRIS_INST_ERROR && inst->m2m_ctx)
+		iris_vb2_queue_error(inst);
 
 	return 0;
 }
