@@ -331,11 +331,17 @@ static int iris_hfi_gen2_handle_input_buffer(struct iris_inst *inst,
 			break;
 		}
 	}
-	if (!found)
-		return -EINVAL;
-
-	if (!(buf->attr & BUF_ATTR_QUEUED))
-		return -EINVAL;
+	/*
+	 * A buffer the firmware returns again, or after a STREAMOFF already
+	 * gave it back, is not ours to complete: skip it, as the downstream
+	 * driver does, instead of failing the session.
+	 */
+	if (!found || !(buf->attr & BUF_ATTR_QUEUED)) {
+		dev_warn_ratelimited(inst->core->dev,
+				     "firmware returned input buffer %u that is not queued\n",
+				     buffer->index);
+		return 0;
+	}
 
 	buf->attr &= ~BUF_ATTR_QUEUED;
 	buf->attr |= BUF_ATTR_DEQUEUED;
@@ -375,11 +381,13 @@ static int iris_hfi_gen2_handle_output_buffer(struct iris_inst *inst,
 			break;
 		}
 	}
-	if (!found)
-		return -EINVAL;
-
-	if (!(buf->attr & BUF_ATTR_QUEUED))
-		return -EINVAL;
+	/* as for input buffers: skip one that is not queued with us */
+	if (!found || !(buf->attr & BUF_ATTR_QUEUED)) {
+		dev_warn_ratelimited(inst->core->dev,
+				     "firmware returned output buffer %u that is not queued\n",
+				     hfi_buffer->index);
+		return 0;
+	}
 
 	buf->data_offset = hfi_buffer->data_offset;
 	buf->data_size = hfi_buffer->data_size;
