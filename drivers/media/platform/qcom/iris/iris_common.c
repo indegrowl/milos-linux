@@ -99,6 +99,21 @@ int iris_process_streamon_output(struct iris_inst *inst)
 
 	first_ipsc = inst->sub_state & IRIS_INST_SUB_FIRST_IPSC;
 
+	/*
+	 * A capture streamoff during a resolution change flushes the buffer
+	 * that would have carried the last flag. Resuming the firmware from
+	 * there faults it (an SMMU fault on the video stream, then a firmware
+	 * watchdog and, on Milos, a full reboot), so fail the session and
+	 * leave the firmware paused instead.
+	 */
+	if (inst->sub_state & IRIS_INST_SUB_DRC &&
+	    !(inst->sub_state & IRIS_INST_SUB_DRC_LAST)) {
+		dev_err(inst->core->dev,
+			"capture restarted before the resolution change completed\n");
+		iris_inst_change_state(inst, IRIS_INST_ERROR);
+		return -EBUSY;
+	}
+
 	drain_active = inst->sub_state & IRIS_INST_SUB_DRAIN &&
 		inst->sub_state & IRIS_INST_SUB_DRAIN_LAST;
 
