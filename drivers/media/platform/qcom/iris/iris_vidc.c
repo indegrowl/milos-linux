@@ -56,6 +56,19 @@ static void iris_add_session(struct iris_inst *inst)
 	mutex_unlock(&core->lock);
 }
 
+static bool iris_session_slot_free(struct iris_core *core)
+{
+	struct iris_inst *iter;
+	u32 count = 0;
+
+	mutex_lock(&core->lock);
+	list_for_each_entry(iter, &core->instances, list)
+		count++;
+	mutex_unlock(&core->lock);
+
+	return count < core->iris_platform_data->max_session_count;
+}
+
 static void iris_remove_session(struct iris_inst *inst)
 {
 	struct iris_core *core = inst->core;
@@ -142,6 +155,13 @@ int iris_open(struct file *filp)
 		session_type = ENCODER;
 	else
 		return -EINVAL;
+
+	/*
+	 * Refuse a session beyond the firmware's limit here: it was opened and
+	 * then failed only at STREAMON, with a less telling error.
+	 */
+	if (!iris_session_slot_free(core))
+		return -EAGAIN;
 
 	ret = pm_runtime_resume_and_get(core->dev);
 	if (ret < 0)
