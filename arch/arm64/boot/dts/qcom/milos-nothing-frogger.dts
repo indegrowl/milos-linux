@@ -823,6 +823,30 @@
 	status = "okay";
 };
 
+&iris {
+	firmware-name = "qcom/milos/nothing/frogger/vpu20_2v.mbn";
+
+	status = "okay";
+};
+
+&iris_opp_table {
+	/*
+	 * This phone's video SKU efuse (0x221c8118 bit 10) reads 1: stock
+	 * msm_video then uses volcano SKU1, whose only frequency is 201.6 MHz.
+	 */
+	/delete-node/ opp-240000000;
+	/delete-node/ opp-338000000;
+	/delete-node/ opp-366000000;
+	/delete-node/ opp-444000000;
+	/delete-node/ opp-552000000;
+
+	opp-201600000 {
+		opp-hz = /bits/ 64 <201600000>;
+		required-opps = <&rpmhpd_opp_low_svs>,
+				<&rpmhpd_opp_svs>;
+	};
+};
+
 &q6apmbedai {
 	#address-cells = <1>;
 	#size-cells = <0>;
