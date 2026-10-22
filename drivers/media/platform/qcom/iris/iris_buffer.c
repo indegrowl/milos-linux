@@ -939,6 +939,7 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 	struct vb2_v4l2_buffer *vbuf;
 	struct vb2_buffer *vb2;
 	u32 type, state;
+	bool error;
 
 	switch (buf->type) {
 	case BUF_INPUT:
@@ -959,16 +960,15 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 
 	vbuf->flags |= buf->flags;
 
-	if (buf->flags & V4L2_BUF_FLAG_ERROR) {
-		state = VB2_BUF_STATE_ERROR;
-		vb2_set_plane_payload(vb2, 0, 0);
-		vb2->timestamp = 0;
-		v4l2_m2m_buf_done(vbuf, state);
-		return 0;
-	}
+	/*
+	 * An error buffer carries no picture, but it may be the buffer flagged
+	 * LAST (end of a drain or of a resolution change) and its timestamp
+	 * still names the input it came from: account for both.
+	 */
+	error = buf->flags & V4L2_BUF_FLAG_ERROR;
 
 	if (V4L2_TYPE_IS_CAPTURE(type)) {
-		vb2_set_plane_payload(vb2, 0, buf->data_size);
+		vb2_set_plane_payload(vb2, 0, error ? 0 : buf->data_size);
 		vbuf->sequence = inst->sequence_cap++;
 		iris_get_ts_metadata(inst, buf->timestamp, vbuf);
 	} else {
@@ -985,7 +985,7 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 		inst->last_buffer_dequeued = true;
 	}
 
-	state = VB2_BUF_STATE_DONE;
+	state = error ? VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE;
 	vb2->timestamp = buf->timestamp;
 	v4l2_m2m_buf_done(vbuf, state);
 
