@@ -2686,8 +2686,8 @@
 			reset-names = "bus",
 				      "core";
 
-			iommus = <&apps_smmu 0x1960 0>,
-				 <&apps_smmu 0x1967 0>;
+			iommus = <&apps_smmu 0x1960 0x0>,
+				 <&apps_smmu 0x1967 0x0>;
 
 			dma-coherent;
 
@@ -2702,7 +2702,7 @@
 
 				opp-240000000 {
 					opp-hz = /bits/ 64 <240000000>;
-					required-opps = <&rpmhpd_opp_svs>,
+					required-opps = <&rpmhpd_opp_low_svs>,
 							<&rpmhpd_opp_svs>;
 				};
 
@@ -2714,19 +2714,19 @@
 
 				opp-366000000 {
 					opp-hz = /bits/ 64 <366000000>;
-					required-opps = <&rpmhpd_opp_svs>,
+					required-opps = <&rpmhpd_opp_svs_l1>,
 							<&rpmhpd_opp_svs>;
 				};
 
 				opp-444000000 {
 					opp-hz = /bits/ 64 <444000000>;
-					required-opps = <&rpmhpd_opp_svs_l1>,
+					required-opps = <&rpmhpd_opp_nom>,
 							<&rpmhpd_opp_svs_l1>;
 				};
 
 				opp-552000000 {
 					opp-hz = /bits/ 64 <552000000>;
-					required-opps = <&rpmhpd_opp_nom>,
+					required-opps = <&rpmhpd_opp_turbo>,
 							<&rpmhpd_opp_nom>;
 				};
 			};
