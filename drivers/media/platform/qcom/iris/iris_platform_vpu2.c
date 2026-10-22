@@ -20,7 +20,7 @@
 static const struct iris_firmware_desc iris_milos_desc = {
 	.firmware_data = &iris_hfi_milos_data,
 	.get_vpu_buffer_size = iris_vpu_buf_size,
-	.fwname = "qcom/vpu/vpu20_p2.mbn",
+	.fwname = "qcom/vpu/vpu20_p2_gen2_s7.mbn",
 };
 
 static const struct iris_firmware_desc iris_vpu20_p1_gen1_desc = {

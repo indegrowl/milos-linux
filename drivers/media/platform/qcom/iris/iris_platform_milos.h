@@ -18,9 +18,8 @@ static struct platform_inst_caps platform_inst_cap_milos = {
 	.min_frame_height = 96,
 	.max_frame_height = 4096,
 	.max_mbpf = (4096 * 2176) / 256,
+	.mb_cycles_vsp = 25,
 	.mb_cycles_vpp = 200,
-	.mb_cycles_fw = 326389,
-	.mb_cycles_fw_vpp = 44156,
 	.max_frame_rate = MILOS_MAXIMUM_FPS,
 	.max_operating_rate = MILOS_MAXIMUM_FPS,
 };
