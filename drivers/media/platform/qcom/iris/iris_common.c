@@ -221,8 +221,30 @@ static void iris_kill_session(struct iris_inst *inst)
 	iris_inst_change_state(inst, IRIS_INST_ERROR);
 }
 
+/* buffers the firmware has not returned yet */
+static u32 iris_count_fw_held_buffers(struct iris_inst *inst,
+				      enum iris_buffer_type type)
+{
+	struct v4l2_m2m_ctx *m2m_ctx = inst->m2m_ctx;
+	struct v4l2_m2m_buffer *buffer, *n;
+	u32 count = 0;
+
+	if (type == BUF_INPUT) {
+		v4l2_m2m_for_each_src_buf_safe(m2m_ctx, buffer, n)
+			if (to_iris_buffer(&buffer->vb)->attr & BUF_ATTR_QUEUED)
+				count++;
+	} else {
+		v4l2_m2m_for_each_dst_buf_safe(m2m_ctx, buffer, n)
+			if (to_iris_buffer(&buffer->vb)->attr & BUF_ATTR_QUEUED)
+				count++;
+	}
+
+	return count;
+}
+
 int iris_session_streamoff(struct iris_inst *inst, u32 plane)
 {
+	u32 held;
 	const struct iris_hfi_session_ops *hfi_ops = inst->hfi_session_ops;
 	enum iris_buffer_type buffer_type;
 	int ret;
@@ -241,6 +263,19 @@ int iris_session_streamoff(struct iris_inst *inst, u32 plane)
 	ret = hfi_ops->session_stop(inst, plane);
 	if (ret)
 		goto error;
+
+	/*
+	 * The firmware returns every buffer of a port before it acknowledges
+	 * the stop. If it still holds some, they go back to the client below
+	 * while the firmware may write to them: close the session first.
+	 */
+	held = iris_count_fw_held_buffers(inst, buffer_type);
+	if (held) {
+		dev_err(inst->core->dev, "firmware still holds %u buffers after stop\n",
+			held);
+		ret = -EBUSY;
+		goto error;
+	}
 
 	ret = iris_inst_state_change_streamoff(inst, plane);
 	if (ret)
