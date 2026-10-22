@@ -136,7 +136,7 @@ examples:
             opp-240000000 {
                 opp-hz = /bits/ 64 <240000000>;
                 required-opps = <&rpmhpd_opp_low_svs>,
-                                <&rpmhpd_opp_low_svs>;
+                                <&rpmhpd_opp_svs>;
             };
 
             opp-338000000 {
@@ -148,19 +148,19 @@ examples:
             opp-366000000 {
                 opp-hz = /bits/ 64 <366000000>;
                 required-opps = <&rpmhpd_opp_svs_l1>,
-                                <&rpmhpd_opp_svs_l1>;
+                                <&rpmhpd_opp_svs>;
             };
 
             opp-444000000 {
                 opp-hz = /bits/ 64 <444000000>;
                 required-opps = <&rpmhpd_opp_nom>,
-                                <&rpmhpd_opp_nom>;
+                                <&rpmhpd_opp_svs_l1>;
             };
 
             opp-552000000 {
                 opp-hz = /bits/ 64 <552000000>;
                 required-opps = <&rpmhpd_opp_turbo>,
-                                <&rpmhpd_opp_turbo>;
+                                <&rpmhpd_opp_nom>;
             };
         };
     };
