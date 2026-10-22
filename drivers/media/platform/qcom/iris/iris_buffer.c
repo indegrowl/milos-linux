@@ -962,8 +962,10 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 
 	/*
 	 * An error buffer carries no picture, but it may be the buffer flagged
-	 * LAST (end of a drain or of a resolution change) and its timestamp
-	 * still names the input it came from: account for both.
+	 * LAST (end of a drain or of a resolution change): account for it.
+	 * Its timestamp stays 0: a VP9 hidden frame shares the timestamp of the
+	 * shown frame from the same packet, and clients matching by timestamp
+	 * (GStreamer) would drop the real picture.
 	 */
 	error = buf->flags & V4L2_BUF_FLAG_ERROR;
 
@@ -986,7 +988,7 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
 	}
 
 	state = error ? VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE;
-	vb2->timestamp = buf->timestamp;
+	vb2->timestamp = error ? 0 : buf->timestamp;
 	v4l2_m2m_buf_done(vbuf, state);
 
 	return 0;
