@@ -97,6 +97,7 @@ struct platform_inst_caps {
 	u32 max_frame_height;
 	u32 max_mbpf;
 	u32 mb_cycles_vsp;
+	u32 mb_cycles_vsp_vp9;	/* VP9 decode, if it differs from mb_cycles_vsp */
 	u32 mb_cycles_vpp;
 	u32 mb_cycles_fw;
 	u32 mb_cycles_fw_vpp;

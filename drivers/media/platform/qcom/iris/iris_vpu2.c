@@ -30,7 +30,11 @@ static u64 iris_vpu2_calc_freq(struct iris_inst *inst, size_t data_size)
 
 	/* 21 / 20 is overhead factor */
 	vpp_freq += vpp_freq / 20;
-	vsp_freq = mbs_per_second * caps->mb_cycles_vsp;
+	if (inst->codec == V4L2_PIX_FMT_VP9 && inst->domain == DECODER &&
+	    caps->mb_cycles_vsp_vp9)
+		vsp_freq = mbs_per_second * caps->mb_cycles_vsp_vp9;
+	else
+		vsp_freq = mbs_per_second * caps->mb_cycles_vsp;
 
 	/* 10 / 7 is overhead factor */
 	vsp_freq += ((fps * data_size * 8) * 10) / 7;
