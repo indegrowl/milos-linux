@@ -23,6 +23,7 @@
 #include "dpu_hw_top.h"
 #include "dpu_rm.h"
 #include "dpu_core_perf.h"
+#include "dpu_hw_lutdma.h"
 
 #define DRMID(x) ((x) ? (x)->base.id : -1)
 
@@ -65,6 +66,8 @@ struct dpu_kms {
 
 	/* io/register spaces: */
 	void __iomem *mmio, *vbif;
+	void __iomem *regdma;		/* optional: LUTDMA */
+	struct dpu_hw_lutdma *lutdma;	/* NULL without regdma */
 
 	struct regulator *vdd;
 	struct regulator *mmagic;

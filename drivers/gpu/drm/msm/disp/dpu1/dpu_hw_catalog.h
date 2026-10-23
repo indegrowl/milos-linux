@@ -78,10 +78,14 @@ enum {
  * DSPP sub-blocks
  * @DPU_DSPP_PCC             Panel color correction block
  * @DPU_DSPP_GC              Gamma correction block
+ * @DPU_DSPP_IGC             Inverse gamma correction block
+ * @DPU_DSPP_GAMUT           3D gamut LUT block
  */
 enum {
 	DPU_DSPP_PCC = 0x1,
 	DPU_DSPP_GC,
+	DPU_DSPP_IGC,
+	DPU_DSPP_GAMUT,
 	DPU_DSPP_MAX
 };
 

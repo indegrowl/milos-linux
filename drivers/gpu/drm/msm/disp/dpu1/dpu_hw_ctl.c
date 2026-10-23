@@ -25,6 +25,7 @@
 #define   CTL_TOP                       0x014
 #define   CTL_FLUSH                     0x018
 #define   CTL_START                     0x01C
+#define   CTL_LUTDMA_TRIGGER            0x0D4
 #define   CTL_PREPARE                   0x0d0
 #define   CTL_SW_RESET                  0x030
 #define   CTL_LAYER_EXTN_OFFSET         0x40
@@ -402,11 +403,23 @@ static void dpu_hw_ctl_update_pending_flush_dspp_sub_blocks(
 	case DPU_DSPP_GC:
 		ctx->pending_dspp_flush_mask[dspp - DSPP_0] |= BIT(5);
 		break;
+	case DPU_DSPP_IGC:
+		ctx->pending_dspp_flush_mask[dspp - DSPP_0] |= BIT(2);
+		break;
+	case DPU_DSPP_GAMUT:
+		ctx->pending_dspp_flush_mask[dspp - DSPP_0] |= BIT(3);
+		break;
 	default:
 		return;
 	}
 
 	ctx->pending_flush_mask |= BIT(DSPP_IDX);
+}
+
+/* Starts the LUTDMA queue 0 command buffers queued for this CTL */
+static void dpu_hw_ctl_trigger_lutdma(struct dpu_hw_ctl *ctx)
+{
+	DPU_REG_WRITE(&ctx->hw, CTL_LUTDMA_TRIGGER, BIT(0));
 }
 
 static u32 dpu_hw_ctl_poll_reset_status(struct dpu_hw_ctl *ctx, u32 timeout_us)
@@ -857,10 +870,12 @@ struct dpu_hw_ctl *dpu_hw_ctl_init(struct drm_device *dev,
 	}
 	c->ops.update_pending_flush_sspp = dpu_hw_ctl_update_pending_flush_sspp;
 	c->ops.update_pending_flush_mixer = dpu_hw_ctl_update_pending_flush_mixer;
-	if (mdss_ver->core_major_ver >= 7)
+	if (mdss_ver->core_major_ver >= 7) {
 		c->ops.update_pending_flush_dspp = dpu_hw_ctl_update_pending_flush_dspp_sub_blocks;
-	else
+		c->ops.trigger_lutdma = dpu_hw_ctl_trigger_lutdma;
+	} else {
 		c->ops.update_pending_flush_dspp = dpu_hw_ctl_update_pending_flush_dspp;
+	}
 
 	if (mdss_ver->core_major_ver >= 7)
 		c->ops.set_active_fetch_pipes = dpu_hw_ctl_set_active_fetch_pipes;

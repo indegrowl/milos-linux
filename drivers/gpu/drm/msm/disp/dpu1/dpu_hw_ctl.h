@@ -72,6 +72,12 @@ struct dpu_hw_ctl_ops {
 	void (*trigger_start)(struct dpu_hw_ctl *ctx);
 
 	/**
+	 * @trigger_lutdma: start the LUTDMA command buffers queued for this CTL
+	 * @ctx       : ctl path ctx pointer
+	 */
+	void (*trigger_lutdma)(struct dpu_hw_ctl *ctx);
+
+	/**
 	 * @is_started: check if the ctl is started
 	 * @ctx       : ctl path ctx pointer
 	 * @Return: true if started, false if stopped

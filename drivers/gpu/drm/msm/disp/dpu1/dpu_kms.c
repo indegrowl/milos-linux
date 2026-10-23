@@ -297,6 +297,52 @@ static void dpu_debugfs_sspp_init(struct dpu_kms *dpu_kms, struct dentry *debugf
 	}
 }
 
+/*
+ * Writes a marker to the DSPP_0 gamut scale/offset register (unused while the
+ * gamut map is off) through LUTDMA on CTL_0, then reads it back over AHB.
+ */
+#define LUTDMA_SELFTEST_OFF	0x1010
+#define LUTDMA_SELFTEST_VAL	0xabc
+static ssize_t dpu_debugfs_lutdma_selftest_write(struct file *file,
+		const char __user *user_buf, size_t count, loff_t *ppos)
+{
+	struct dpu_kms *kms = file->private_data;
+	struct dpu_lutdma_cmdbuf *b;
+	struct dpu_hw_ctl *ctl;
+	u32 readback;
+	int i, rc;
+
+	if (!kms->lutdma)
+		return -ENODEV;
+
+	for (i = 0; i < ARRAY_SIZE(kms->rm.ctl_blks); i++)
+		if (kms->rm.ctl_blks[i] && to_dpu_hw_ctl(kms->rm.ctl_blks[i])->idx == CTL_0)
+			break;
+	if (i == ARRAY_SIZE(kms->rm.ctl_blks))
+		return -ENODEV;
+	ctl = to_dpu_hw_ctl(kms->rm.ctl_blks[i]);
+
+	pm_runtime_get_sync(&kms->pdev->dev);
+	b = dpu_hw_lutdma_begin(kms->lutdma);
+	rc = dpu_lutdma_cmd_decode_sel(b, DPU_LUTDMA_DECODE_DSPP0);
+	if (!rc)
+		rc = dpu_lutdma_cmd_write(b, LUTDMA_SELFTEST_OFF, LUTDMA_SELFTEST_VAL);
+	if (!rc)
+		rc = dpu_hw_lutdma_submit(kms->lutdma, ctl);
+	readback = readl(kms->mmio + kms->catalog->dspp[0].base + LUTDMA_SELFTEST_OFF);
+	writel(0, kms->mmio + kms->catalog->dspp[0].base + LUTDMA_SELFTEST_OFF);
+	pm_runtime_put_sync(&kms->pdev->dev);
+
+	pr_info("dpu lutdma selftest: rc=%d err=0x%x readback=0x%x (want 0x%x)\n", rc,
+		dpu_hw_lutdma_error_status(kms->lutdma), readback, LUTDMA_SELFTEST_VAL);
+	return count;
+}
+
+static const struct file_operations dpu_debugfs_lutdma_selftest_fops = {
+	.open = simple_open,
+	.write = dpu_debugfs_lutdma_selftest_write,
+};
+
 static int dpu_kms_debugfs_init(struct msm_kms *kms, struct drm_minor *minor)
 {
 	struct dpu_kms *dpu_kms = to_dpu_kms(kms);
@@ -318,6 +364,8 @@ static int dpu_kms_debugfs_init(struct msm_kms *kms, struct drm_minor *minor)
 	dpu_debugfs_vbif_init(dpu_kms, entry);
 	dpu_debugfs_core_irq_init(dpu_kms, entry);
 	dpu_debugfs_sspp_init(dpu_kms, entry);
+	debugfs_create_file("lutdma_selftest", 0200, entry, dpu_kms,
+			    &dpu_debugfs_lutdma_selftest_fops);
 
 	return dpu_core_perf_debugfs_init(dpu_kms, entry);
 }
@@ -899,6 +947,9 @@ static void _dpu_kms_hw_destroy(struct dpu_kms *dpu_kms)
 {
 	dpu_kms->hw_intr = NULL;
 
+	dpu_hw_lutdma_destroy(dpu_kms->lutdma);
+	dpu_kms->lutdma = NULL;
+
 	/* safe to call these more than once during shutdown */
 	_dpu_kms_mmu_destroy(dpu_kms);
 
@@ -1193,6 +1244,14 @@ static int dpu_kms_hw_init(struct msm_kms *kms)
 		goto err_pm_put;
 	}
 
+	if (dpu_kms->regdma) {
+		dpu_kms->lutdma = dpu_hw_lutdma_init(dev, dpu_kms->base.vm, dpu_kms->regdma);
+		if (IS_ERR(dpu_kms->lutdma)) {
+			DPU_ERROR("lutdma init failed: %ld\n", PTR_ERR(dpu_kms->lutdma));
+			dpu_kms->lutdma = NULL;
+		}
+	}
+
 	dpu_kms->mdss = qcom_ubwc_config_get_data();
 	if (IS_ERR(dpu_kms->mdss)) {
 		rc = PTR_ERR(dpu_kms->mdss);
@@ -1381,6 +1440,11 @@ static int dpu_kms_mmap_dpu(struct dpu_kms *dpu_kms)
 		dpu_kms->vbif = NULL;
 		return ret;
 	}
+
+	/* optional: the LUTDMA engine, for DSPP LUTs that have no register interface */
+	dpu_kms->regdma = msm_ioremap_quiet(pdev, "regdma");
+	if (IS_ERR(dpu_kms->regdma))
+		dpu_kms->regdma = NULL;
 
 	return 0;
 }
