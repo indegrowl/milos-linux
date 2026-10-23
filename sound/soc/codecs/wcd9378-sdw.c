@@ -31,14 +31,17 @@
 	}
 
 /*
- * Each ADC sits alone on its own TX device port (channel 1); by default
- * they land on channels 1/2/3 of the same master port. DMIC/MBHC masks
- * per the downstream qcom,tx_swr_ch_map.
+ * Each ADC sits alone on its own TX device port (channel 1) and goes to
+ * channel 1 of its own master port, as the downstream mixer paths do
+ * (ADCn ChMap = SWRM_TXn_CH1). A device port's single channel cannot be
+ * received as channel 2 or 3 of a master port shared with another device
+ * port: ADC2/ADC3 then record nothing. DMIC/MBHC masks per the downstream
+ * qcom,tx_swr_ch_map.
  */
 static const struct wcd_sdw_ch_info wcd9378_sdw_tx_ch_info[] = {
 	WCD9378_SDW_CH(WCD9378_ADC1, WCD9378_ADC_1_PORT, BIT(0), BIT(0)),
-	WCD9378_SDW_CH(WCD9378_ADC2, WCD9378_ADC_2_PORT, BIT(0), BIT(1)),
-	WCD9378_SDW_CH(WCD9378_ADC3, WCD9378_ADC_3_PORT, BIT(0), BIT(2)),
+	WCD9378_SDW_CH(WCD9378_ADC2, WCD9378_ADC_2_PORT, BIT(0), BIT(0)),
+	WCD9378_SDW_CH(WCD9378_ADC3, WCD9378_ADC_3_PORT, BIT(0), BIT(0)),
 	WCD9378_SDW_CH(WCD9378_DMIC0, WCD9378_DMIC_0_1_MBHC_PORT, BIT(2), BIT(0)),
 	WCD9378_SDW_CH(WCD9378_DMIC1, WCD9378_DMIC_0_1_MBHC_PORT, BIT(3), BIT(1)),
 	WCD9378_SDW_CH(WCD9378_MBHC, WCD9378_DMIC_0_1_MBHC_PORT, BIT(2), BIT(2)),

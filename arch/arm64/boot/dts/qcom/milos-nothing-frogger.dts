@@ -158,8 +158,8 @@
 				"AMIC2", "MIC BIAS2",
 				"AMIC3", "MIC BIAS3",
 				"TX SWR_INPUT0", "ADC1_OUTPUT",
-				"TX SWR_INPUT1", "ADC2_OUTPUT",
-				"TX SWR_INPUT2", "ADC3_OUTPUT";
+				"TX SWR_INPUT4", "ADC2_OUTPUT",
+				"TX SWR_INPUT8", "ADC3_OUTPUT";
 
 		pinctrl-0 = <&i2s0_active>;
 		pinctrl-1 = <&i2s0_sleep>;
@@ -934,13 +934,14 @@
 
 		/*
 		 * WCD9378 TX port 1 (ADC1)          <=> SWR2 port 1 (SWRM_TX1)
-		 * WCD9378 TX port 2 (ADC2)          <=> SWR2 port 1
-		 * WCD9378 TX port 3 (ADC3)          <=> SWR2 port 1
+		 * WCD9378 TX port 2 (ADC2)          <=> SWR2 port 2 (SWRM_TX2)
+		 * WCD9378 TX port 3 (ADC3)          <=> SWR2 port 3 (SWRM_TX3)
+		 * (one master port per ADC, as stock's ADCn ChMap = SWRM_TXn_CH1)
 		 * WCD9378 TX port 4 (DMIC0,1, MBHC) <=> SWR2 port 2
 		 * WCD9378 TX port 5 (DMIC2..5)      <=> SWR2 port 3
 		 */
 		qcom,control-device;
-		qcom,port-mapping = <1 1 1 2 3>;
+		qcom,port-mapping = <1 2 3 2 3>;
 	};
 };
 
