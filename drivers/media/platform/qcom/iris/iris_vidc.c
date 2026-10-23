@@ -309,6 +309,12 @@ int iris_close(struct file *filp)
 	v4l2_m2m_ctx_release(inst->m2m_ctx);
 	v4l2_m2m_release(inst->m2m_dev);
 	mutex_lock(&inst->lock);
+	/*
+	 * The context is gone: a session failing from here on (close timeout,
+	 * firmware error) must not wake up its queues.
+	 */
+	inst->m2m_ctx = NULL;
+	inst->fh.m2m_ctx = NULL;
 	iris_session_close(inst);
 	iris_inst_change_state(inst, IRIS_INST_DEINIT);
 	iris_v4l2_fh_deinit(inst, filp);
