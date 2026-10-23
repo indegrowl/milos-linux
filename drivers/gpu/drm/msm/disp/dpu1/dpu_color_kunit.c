@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * KUnit tests for the DSPP colour calibration helpers. The helpers have no
- * hardware dependencies, so they are built into the test directly.
+ * KUnit tests for the DSPP colour calibration helpers and the LUTDMA command
+ * encoders. Neither has hardware dependencies, so they are built into the
+ * test directly.
  */
 
 #include <kunit/test.h>
@@ -9,6 +10,7 @@
 #include <linux/slab.h>
 
 #include "dpu_color_calib.c"
+#include "dpu_lutdma_cmd.c"
 
 #define BLOB_IGC	20
 #define BLOB_GAMUT	1562
@@ -190,7 +192,126 @@ static struct kunit_suite dpu_color_calib_suite = {
 	.test_cases = dpu_color_calib_cases,
 };
 
-kunit_test_suite(dpu_color_calib_suite);
+static struct dpu_lutdma_cmdbuf *cmdbuf(struct kunit *test, u32 cap)
+{
+	struct dpu_lutdma_cmdbuf *b = kunit_kzalloc(test, sizeof(*b), GFP_KERNEL);
+	u32 *mem = kunit_kzalloc(test, cap * 4, GFP_KERNEL);
 
-MODULE_DESCRIPTION("KUnit tests for the DPU DSPP colour calibration");
+	KUNIT_ASSERT_NOT_NULL(test, b);
+	KUNIT_ASSERT_NOT_NULL(test, mem);
+	dpu_lutdma_cmd_init(b, mem, cap);
+	return b;
+}
+
+static void decode_sel_words(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 8);
+
+	KUNIT_ASSERT_EQ(test, dpu_lutdma_cmd_decode_sel(b, DPU_LUTDMA_DECODE_DSPP0), 0);
+	KUNIT_EXPECT_EQ(test, b->len, 2);
+	KUNIT_EXPECT_EQ(test, b->dw[0], 0x18180114);
+	KUNIT_EXPECT_EQ(test, b->dw[1], BIT(17));
+}
+
+static void write_words(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 8);
+
+	KUNIT_ASSERT_EQ(test, dpu_lutdma_cmd_write(b, 0x1264, 0x100), 0);
+	KUNIT_EXPECT_EQ(test, b->len, 2);
+	KUNIT_EXPECT_EQ(test, b->dw[0], 0x10001264);
+	KUNIT_EXPECT_EQ(test, b->dw[1], 0x100);
+}
+
+static void write_bad_offset(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 8);
+
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd_write(b, 0x200000, 0), -EINVAL);
+	KUNIT_EXPECT_EQ(test, b->len, 0);
+}
+
+static void lut_igc_header(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 512);
+	u16 *data = kunit_kzalloc(test, DPU_IGC_STREAM_U16 * 2, GFP_KERNEL);
+	int i;
+
+	KUNIT_ASSERT_NOT_NULL(test, data);
+	for (i = 0; i < DPU_IGC_STREAM_U16; i++)
+		data[i] = i + 1;
+	KUNIT_ASSERT_EQ(test, dpu_lutdma_cmd_lut(b, DPU_LUTDMA_BLOCK_IGC, DPU_LUTDMA_TRANS_IGC,
+						 data, DPU_IGC_STREAM_U16), 0);
+	KUNIT_EXPECT_EQ(test, b->len, 392);
+	KUNIT_EXPECT_EQ(test, b->dw[0], 0x60000000);
+	KUNIT_EXPECT_EQ(test, b->dw[1], (3 << 16) | 129);
+	/* u16 pairs, low half first */
+	KUNIT_EXPECT_EQ(test, b->dw[2], 1 | 2 << 16);
+	KUNIT_EXPECT_EQ(test, b->dw[388], 773 | 774 << 16);
+	for (i = 389; i < 392; i++)
+		KUNIT_EXPECT_EQ(test, b->dw[i], 0);
+}
+
+static void lut_gamut_header(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 8192);
+	u16 *data = kunit_kzalloc(test, DPU_GAMUT_STREAM_U16 * 2, GFP_KERNEL);
+
+	KUNIT_ASSERT_NOT_NULL(test, data);
+	KUNIT_ASSERT_EQ(test, dpu_lutdma_cmd_lut(b, DPU_LUTDMA_BLOCK_GAMUT, DPU_LUTDMA_TRANS_GAMUT,
+						 data, DPU_GAMUT_STREAM_U16), 0);
+	KUNIT_EXPECT_EQ(test, b->dw[0], 0x60000001);
+	KUNIT_EXPECT_EQ(test, b->dw[1], (6 << 16) | 1229);
+	KUNIT_EXPECT_EQ(test, b->len, 2 + 7374 + 3);
+}
+
+static void lut_bad_size(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 512);
+	u16 data[8] = {};
+
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd_lut(b, DPU_LUTDMA_BLOCK_IGC, DPU_LUTDMA_TRANS_IGC,
+						 data, 4), -EINVAL);
+	KUNIT_EXPECT_EQ(test, b->len, 0);
+}
+
+static void enospc_keeps_len(struct kunit *test)
+{
+	struct dpu_lutdma_cmdbuf *b = cmdbuf(test, 3);
+	u16 data[6] = {};
+
+	KUNIT_ASSERT_EQ(test, dpu_lutdma_cmd_write(b, 0x1000, 1), 0);
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd_decode_sel(b, 1), -ENOSPC);
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd_last(b), -ENOSPC);
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd_lut(b, DPU_LUTDMA_BLOCK_IGC, DPU_LUTDMA_TRANS_IGC,
+						 data, 6), -ENOSPC);
+	KUNIT_EXPECT_EQ(test, b->len, 2);
+}
+
+static void cmd1_bits(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd1(2, true), 0x01400002);
+	KUNIT_EXPECT_EQ(test, dpu_lutdma_cmd1(392, false), 0x00400188);
+}
+
+static struct kunit_case dpu_lutdma_cmd_cases[] = {
+	KUNIT_CASE(decode_sel_words),
+	KUNIT_CASE(write_words),
+	KUNIT_CASE(write_bad_offset),
+	KUNIT_CASE(lut_igc_header),
+	KUNIT_CASE(lut_gamut_header),
+	KUNIT_CASE(lut_bad_size),
+	KUNIT_CASE(enospc_keeps_len),
+	KUNIT_CASE(cmd1_bits),
+	{}
+};
+
+static struct kunit_suite dpu_lutdma_cmd_suite = {
+	.name = "dpu_lutdma_cmd",
+	.test_cases = dpu_lutdma_cmd_cases,
+};
+
+kunit_test_suites(&dpu_color_calib_suite, &dpu_lutdma_cmd_suite);
+
+MODULE_DESCRIPTION("KUnit tests for the DPU DSPP colour calibration and LUTDMA commands");
 MODULE_LICENSE("GPL");
