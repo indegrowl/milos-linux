@@ -335,10 +335,14 @@ struct dpu_lm_sub_blks {
  * struct dpu_dspp_sub_blks: Information of DSPP block
  * @pcc: pixel color correction block
  * @gc: gamma correction block
+ * @igc: inverse gamma correction block (LUT loaded through LUTDMA)
+ * @gamut: 3D gamut LUT block (LUT loaded through LUTDMA)
  */
 struct dpu_dspp_sub_blks {
 	struct dpu_pp_blk pcc;
 	struct dpu_pp_blk gc;
+	struct dpu_pp_blk igc;
+	struct dpu_pp_blk gamut;
 };
 
 struct dpu_pingpong_sub_blks {

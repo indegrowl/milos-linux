@@ -413,6 +413,17 @@ static const struct dpu_dspp_sub_blks sdm845_dspp_sblk = {
 		.len = 0x40, .version = 0x10008},
 };
 
+static const struct dpu_dspp_sub_blks milos_dspp_sblk = {
+	.pcc = {.name = "pcc", .base = 0x1700,
+		.len = 0x90, .version = 0x40000},
+	.gc = {.name = "gc", .base = 0x17c0,
+		.len = 0x40, .version = 0x10008},
+	.igc = {.name = "igc", .base = 0x1260,
+		.len = 0x8, .version = 0x40000},
+	.gamut = {.name = "gamut", .base = 0x1000,
+		.len = 0xd0, .version = 0x40003},
+};
+
 static const struct dpu_dspp_sub_blks sm8750_dspp_sblk = {
 	.pcc = {.name = "pcc", .base = 0x1700,
 		.len = 0x90, .version = 0x60000},

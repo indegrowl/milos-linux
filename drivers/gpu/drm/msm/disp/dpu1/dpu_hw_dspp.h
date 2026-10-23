@@ -6,6 +6,7 @@
 #define _DPU_HW_DSPP_H
 
 struct dpu_hw_dspp;
+struct dpu_lutdma_cmdbuf;
 
 /**
  * struct dpu_hw_pcc_coeff - PCC coefficient structure for each color
@@ -71,6 +72,24 @@ struct dpu_hw_dspp_ops {
 	 * @gc_lut: Pointer to lut content
 	 */
 	void (*setup_gc)(struct dpu_hw_dspp *ctx, struct dpu_hw_gc_lut *gc_lut);
+
+	/**
+	 * @build_igc: append IGC programming to a LUTDMA command buffer
+	 * @ctx: Pointer to dspp context
+	 * @b: LUTDMA command buffer
+	 * @stream: IGC LUT-bus stream (DPU_IGC_STREAM_U16 entries), NULL to disable
+	 */
+	int (*build_igc)(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
+			 const u16 *stream);
+
+	/**
+	 * @build_gamut: append 3D gamut programming to a LUTDMA command buffer
+	 * @ctx: Pointer to dspp context
+	 * @b: LUTDMA command buffer
+	 * @stream: gamut LUT-bus stream (DPU_GAMUT_STREAM_U16 entries), NULL to disable
+	 */
+	int (*build_gamut)(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
+			   const u16 *stream);
 
 };
 

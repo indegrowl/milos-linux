@@ -9,6 +9,8 @@
 #include "dpu_hw_lm.h"
 #include "dpu_hw_dspp.h"
 #include "dpu_kms.h"
+#include "dpu_color_calib.h"
+#include "dpu_lutdma_cmd.h"
 
 
 /* DSPP_PCC */
@@ -115,6 +117,40 @@ static void dpu_setup_dspp_gc(struct dpu_hw_dspp *ctx,
 	DPU_REG_WRITE(&ctx->hw, base, reg);
 }
 
+#define IGC_OPMODE_OFF		0x4
+#define IGC_EN			BIT(8)
+#define GAMUT_EN		BIT(0)	/* 17x17x17 mode, no scale/offset map */
+
+static int dpu_build_dspp_lut(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
+			      u32 block, u32 trans, const u16 *stream, u32 n_u16,
+			      u32 opmode_off, u32 enable)
+{
+	int ret;
+
+	ret = dpu_lutdma_cmd_decode_sel(b, DPU_LUTDMA_DECODE_DSPP0 << (ctx->idx - DSPP_0));
+	if (!ret && stream)
+		ret = dpu_lutdma_cmd_lut(b, block, trans, stream, n_u16);
+	if (!ret)
+		ret = dpu_lutdma_cmd_write(b, opmode_off, stream ? enable : 0);
+	return ret;
+}
+
+static int dpu_build_dspp_igc(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
+			      const u16 *stream)
+{
+	return dpu_build_dspp_lut(ctx, b, DPU_LUTDMA_BLOCK_IGC, DPU_LUTDMA_TRANS_IGC,
+				  stream, DPU_IGC_STREAM_U16,
+				  ctx->cap->sblk->igc.base + IGC_OPMODE_OFF, IGC_EN);
+}
+
+static int dpu_build_dspp_gamut(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
+				const u16 *stream)
+{
+	return dpu_build_dspp_lut(ctx, b, DPU_LUTDMA_BLOCK_GAMUT, DPU_LUTDMA_TRANS_GAMUT,
+				  stream, DPU_GAMUT_STREAM_U16,
+				  ctx->cap->sblk->gamut.base, GAMUT_EN);
+}
+
 /**
  * dpu_hw_dspp_init() - Initializes the DSPP hw driver object.
  * should be called once before accessing every DSPP.
@@ -146,6 +182,10 @@ struct dpu_hw_dspp *dpu_hw_dspp_init(struct drm_device *dev,
 		c->ops.setup_pcc = dpu_setup_dspp_pcc;
 	if (c->cap->sblk->gc.base)
 		c->ops.setup_gc = dpu_setup_dspp_gc;
+	if (c->cap->sblk->igc.base)
+		c->ops.build_igc = dpu_build_dspp_igc;
+	if (c->cap->sblk->gamut.base)
+		c->ops.build_gamut = dpu_build_dspp_gamut;
 
 	return c;
 }
