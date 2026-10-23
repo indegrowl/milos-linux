@@ -201,3 +201,11 @@ config DRM_MSM_HDMI_HDCP
 	default y
 	help
 	  Choose this option to enable HDCP state machine
+
+config DRM_MSM_DPU_COLOR_KUNIT_TEST
+	tristate "KUnit tests for the DPU DSPP colour calibration" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Tests for the DSPP colour calibration parser, the LUT stream
+	  packers and the LUTDMA command encoders. They need no hardware.
