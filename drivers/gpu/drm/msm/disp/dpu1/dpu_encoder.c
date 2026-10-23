@@ -686,7 +686,12 @@ void dpu_encoder_update_topology(struct drm_encoder *drm_enc,
 		 */
 		WARN(topology->num_intf > 2,
 		     "DSC topology cannot support more than 2 interfaces\n");
-		if (topology->num_intf >= 2 || dpu_kms->catalog->dsc_count >= 2)
+		/*
+		 * A default CTM needs a DSPP on every mixer; with one interface,
+		 * one DSC on one mixer is enough (the 4a's Android topology).
+		 */
+		if (topology->num_intf >= 2 ||
+		    (dpu_kms->catalog->dsc_count >= 2 && !READ_ONCE(dpu_default_ctm)))
 			topology->num_dsc = 2;
 		else
 			topology->num_dsc = 1;
