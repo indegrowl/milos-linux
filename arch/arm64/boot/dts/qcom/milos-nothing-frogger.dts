@@ -688,6 +688,11 @@
 	status = "okay";
 };
 
+&mdss_mdp {
+	/* stock QDCM calibration of the BOE panel (IGC, 3D gamut, GC) */
+	qcom,dspp-calibration = "qcom/milos/nothing-frogger-dspp.bin";
+};
+
 &mdss_dsi0 {
 	vdda-supply = <&vreg_l4b>;
 
