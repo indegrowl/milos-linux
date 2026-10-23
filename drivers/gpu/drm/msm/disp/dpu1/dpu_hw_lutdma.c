@@ -47,6 +47,7 @@ struct dpu_hw_lutdma {
 	u64 iova;
 	struct dpu_lutdma_cmdbuf cmd;
 	u32 err_status;
+	bool inject_fail;	/* debugfs: fail the next submit */
 };
 
 struct dpu_hw_lutdma *dpu_hw_lutdma_init(struct drm_device *dev, struct drm_gpuvm *vm,
@@ -97,6 +98,11 @@ struct dpu_lutdma_cmdbuf *dpu_hw_lutdma_begin(struct dpu_hw_lutdma *dma)
 	return &dma->cmd;
 }
 
+bool *dpu_hw_lutdma_inject_fail(struct dpu_hw_lutdma *dma)
+{
+	return &dma->inject_fail;
+}
+
 u32 dpu_hw_lutdma_error_status(struct dpu_hw_lutdma *dma)
 {
 	return dma->err_status;
@@ -110,6 +116,11 @@ int dpu_hw_lutdma_submit(struct dpu_hw_lutdma *dma, struct dpu_hw_ctl *ctl)
 
 	if (!dma->cmd.len)
 		return -EINVAL;
+
+	if (dma->inject_fail) {
+		dma->inject_fail = false;
+		return -EIO;
+	}
 
 	/* the buffer is write-combined: make it visible before the engine reads it */
 	wmb();

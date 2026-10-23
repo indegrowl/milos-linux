@@ -390,6 +390,9 @@ static int dpu_kms_debugfs_init(struct msm_kms *kms, struct drm_minor *minor)
 	dpu_debugfs_sspp_init(dpu_kms, entry);
 	debugfs_create_file("lutdma_selftest", 0200, entry, dpu_kms,
 			    &dpu_debugfs_lutdma_selftest_fops);
+	if (dpu_kms->lutdma)
+		debugfs_create_bool("lutdma_inject_fail", 0600, entry,
+				    dpu_hw_lutdma_inject_fail(dpu_kms->lutdma));
 	dpu_kms_color_debugfs_init(dpu_kms, entry);
 
 	return dpu_core_perf_debugfs_init(dpu_kms, entry);

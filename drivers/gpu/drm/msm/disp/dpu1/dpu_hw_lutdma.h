@@ -21,5 +21,6 @@ void dpu_hw_lutdma_destroy(struct dpu_hw_lutdma *dma);
 struct dpu_lutdma_cmdbuf *dpu_hw_lutdma_begin(struct dpu_hw_lutdma *dma);
 int dpu_hw_lutdma_submit(struct dpu_hw_lutdma *dma, struct dpu_hw_ctl *ctl);
 u32 dpu_hw_lutdma_error_status(struct dpu_hw_lutdma *dma);
+bool *dpu_hw_lutdma_inject_fail(struct dpu_hw_lutdma *dma);
 
 #endif /* _DPU_HW_LUTDMA_H */
