@@ -143,9 +143,9 @@ static void gamut_stream_default(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, s);
 	memset(s, 0xff, DPU_GAMUT_STREAM_U16 * 2);
 	dpu_color_calib_gamut_stream(c, DPU_GAMUT_LAYOUT_DEFAULT, s);
-	/* [c0, c2, c1] = [G, R, B] */
-	KUNIT_EXPECT_EQ(test, s[48], ramp_gamut(16, 1) << 4);
-	KUNIT_EXPECT_EQ(test, s[49], ramp_gamut(16, 0) << 4);
+	/* milos takes each entry as [R, G, B] (checked on the 4a) */
+	KUNIT_EXPECT_EQ(test, s[48], ramp_gamut(16, 0) << 4);
+	KUNIT_EXPECT_EQ(test, s[49], ramp_gamut(16, 1) << 4);
 	KUNIT_EXPECT_EQ(test, s[50], ramp_gamut(16, 2) << 4);
 	for (i = 14739; i < DPU_GAMUT_STREAM_U16; i++)
 		KUNIT_EXPECT_EQ(test, s[i], 0);
@@ -157,9 +157,9 @@ static void gamut_stream_swap_axes(struct kunit *test)
 	u16 *s = kunit_kzalloc(test, DPU_GAMUT_STREAM_U16 * 2, GFP_KERNEL);
 
 	KUNIT_ASSERT_NOT_NULL(test, s);
-	dpu_color_calib_gamut_stream(c, DPU_GAMUT_LAYOUT_SWAP_RB_AXES, s);
-	KUNIT_EXPECT_EQ(test, s[48], ramp_gamut(289 * 16, 1) << 4);
-	KUNIT_EXPECT_EQ(test, s[49], ramp_gamut(289 * 16, 0) << 4);
+	dpu_color_calib_gamut_stream(c, DPU_GAMUT_LAYOUT_DEFAULT | DPU_GAMUT_LAYOUT_SWAP_RB_AXES, s);
+	KUNIT_EXPECT_EQ(test, s[48], ramp_gamut(289 * 16, 0) << 4);
+	KUNIT_EXPECT_EQ(test, s[49], ramp_gamut(289 * 16, 1) << 4);
 	KUNIT_EXPECT_EQ(test, s[50], ramp_gamut(289 * 16, 2) << 4);
 }
 

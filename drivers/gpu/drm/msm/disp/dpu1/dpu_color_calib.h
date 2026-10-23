@@ -24,7 +24,8 @@
 #define DPU_GAMUT_LAYOUT_SWAP_RB_AXES	BIT(0)
 /* bits [3:1]: which source channels feed (c0, c1, c2), see dpu_color_calib.c */
 #define DPU_GAMUT_LAYOUT_PERM_SHIFT	1
-#define DPU_GAMUT_LAYOUT_DEFAULT	0
+/* permutation 4 (slots [R, G, B]), axes as stored: what milos takes (checked on the 4a) */
+#define DPU_GAMUT_LAYOUT_DEFAULT	(4 << DPU_GAMUT_LAYOUT_PERM_SHIFT)
 
 /* Channels are R, G, B; gamut entries are indexed r + 17g + 289b. */
 struct dpu_color_calib {
