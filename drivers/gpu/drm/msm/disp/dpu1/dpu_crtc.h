@@ -153,6 +153,18 @@ struct dpu_crtc_frame_event {
  * @cur_perf      : current performance committed to clock/bandwidth driver
  * @crc_source    : CRC source
  */
+/**
+ * struct dpu_crtc_color - colour processing applied without userspace colour state
+ * @mode: dpu_default_ctm mode, -1 while userspace sets a CTM or gamma LUT
+ * @gen: calibration generation when @calib
+ * @calib: IGC, 3D gamut and GC programmed from the panel calibration
+ */
+struct dpu_crtc_color {
+	int mode;
+	u32 gen;
+	bool calib;
+};
+
 struct dpu_crtc {
 	struct drm_crtc base;
 	char name[DPU_CRTC_NAME_SIZE];
@@ -184,8 +196,9 @@ struct dpu_crtc {
 
 	struct dpu_crtc_smmu_state_data smmu_state;
 
-	/* default PCC matrix last programmed while no CTM was set */
-	const struct dpu_hw_pcc_cfg *applied_default_pcc;
+	/* default colour processing last programmed, see _dpu_crtc_setup_cp_blocks() */
+	struct dpu_crtc_color applied_color;
+	bool color_applied;
 };
 
 #define to_dpu_crtc(x) container_of(x, struct dpu_crtc, base)

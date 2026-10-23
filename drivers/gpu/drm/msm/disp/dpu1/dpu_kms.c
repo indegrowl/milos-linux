@@ -56,13 +56,16 @@ bool dpu_use_virtual_planes = true;
 module_param(dpu_use_virtual_planes, bool, 0);
 
 /*
- * Matrix applied by the DSPP PCC when userspace sets no CTM:
- * 0 = none (DSPPs only with a CTM/gamma LUT), 1 = identity, 2 = panel correction.
+ * DSPP colour processing applied when userspace sets no CTM or gamma LUT:
+ * 0 = none (DSPPs only with a CTM/gamma LUT), 1 = bypass (identity PCC),
+ * 2 = PCC fit of the 4a panel correction, 3 = the panel's colour calibration
+ * (IGC + 3D gamut + GC, see dpu_kms_color.c; without one it acts as 1).
  * Wide-gamut panels such as the Nothing Phone (4a) AMOLED oversaturate sRGB content.
  */
-int dpu_default_ctm = 2;
+int dpu_default_ctm = 3;
 module_param(dpu_default_ctm, int, 0644);
-MODULE_PARM_DESC(dpu_default_ctm, "default CTM: 0=off, 1=identity, 2=panel correction");
+MODULE_PARM_DESC(dpu_default_ctm,
+		 "default colour: 0=off, 1=bypass, 2=PCC fit, 3=panel calibration");
 
 static int dpu_kms_hw_init(struct msm_kms *kms);
 static void _dpu_kms_mmu_destroy(struct dpu_kms *dpu_kms);
@@ -366,6 +369,7 @@ static int dpu_kms_debugfs_init(struct msm_kms *kms, struct drm_minor *minor)
 	dpu_debugfs_sspp_init(dpu_kms, entry);
 	debugfs_create_file("lutdma_selftest", 0200, entry, dpu_kms,
 			    &dpu_debugfs_lutdma_selftest_fops);
+	dpu_kms_color_debugfs_init(dpu_kms, entry);
 
 	return dpu_core_perf_debugfs_init(dpu_kms, entry);
 }
@@ -947,6 +951,7 @@ static void _dpu_kms_hw_destroy(struct dpu_kms *dpu_kms)
 {
 	dpu_kms->hw_intr = NULL;
 
+	dpu_kms_color_fini(dpu_kms);
 	dpu_hw_lutdma_destroy(dpu_kms->lutdma);
 	dpu_kms->lutdma = NULL;
 
@@ -1251,6 +1256,7 @@ static int dpu_kms_hw_init(struct msm_kms *kms)
 			dpu_kms->lutdma = NULL;
 		}
 	}
+	dpu_kms_color_init(dpu_kms);
 
 	dpu_kms->mdss = qcom_ubwc_config_get_data();
 	if (IS_ERR(dpu_kms->mdss)) {

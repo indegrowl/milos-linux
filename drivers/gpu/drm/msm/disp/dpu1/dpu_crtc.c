@@ -806,13 +806,16 @@ static const struct dpu_hw_pcc_cfg dpu_pcc_identity = {
 	.b = { .b = 32768 },
 };
 
-static const struct dpu_hw_pcc_cfg *_dpu_crtc_default_pcc(void)
+/* PCC matrix for a dpu_default_ctm mode; with the calibration the PCC is off */
+static const struct dpu_hw_pcc_cfg *_dpu_crtc_default_pcc(int mode, bool calib)
 {
-	switch (READ_ONCE(dpu_default_ctm)) {
+	switch (mode) {
 	case 1:
 		return &dpu_pcc_identity;
 	case 2:
 		return &dpu_pcc_frogger;
+	case 3:
+		return calib ? NULL : &dpu_pcc_identity;
 	default:
 		return NULL;
 	}
@@ -872,24 +875,92 @@ static void _dpu_crtc_get_gc_lut(struct drm_crtc_state *state,
 	gc_lut->flags = 0;
 }
 
+/*
+ * Loads (calib) or disables the IGC and 3D gamut of every DSPP of the CRTC
+ * through LUTDMA and stages their flush bits.
+ */
+static int _dpu_crtc_setup_lutdma(struct dpu_kms *kms, struct dpu_crtc_state *cstate,
+				  bool calib)
+{
+	struct dpu_kms_color *c = &kms->color;
+	struct dpu_crtc_mixer *mixer = cstate->mixers;
+	struct dpu_lutdma_cmdbuf *b;
+	struct dpu_hw_ctl *ctl = NULL;
+	int i, ret = 0;
+
+	if (!kms->lutdma)
+		return 0;
+
+	b = dpu_hw_lutdma_begin(kms->lutdma);
+	for (i = 0; i < cstate->num_mixers && !ret; i++) {
+		struct dpu_hw_dspp *dspp = mixer[i].hw_dspp;
+
+		if (!dspp || !dspp->ops.build_igc || !dspp->ops.build_gamut)
+			continue;
+		ret = dspp->ops.build_igc(dspp, b, calib ? c->igc_stream : NULL);
+		if (!ret)
+			ret = dspp->ops.build_gamut(dspp, b, calib ? c->gamut_stream : NULL);
+		ctl = mixer[i].lm_ctl;
+	}
+	if (ret || !ctl)
+		return ret;
+
+	ret = dpu_hw_lutdma_submit(kms->lutdma, ctl);
+	c->last_rc = ret;
+	if (ret)
+		return ret;
+
+	for (i = 0; i < cstate->num_mixers; i++) {
+		struct dpu_hw_dspp *dspp = mixer[i].hw_dspp;
+
+		if (!dspp || !dspp->ops.build_igc || !dspp->ops.build_gamut)
+			continue;
+		mixer[i].lm_ctl->ops.update_pending_flush_dspp(mixer[i].lm_ctl, dspp->idx,
+							       DPU_DSPP_IGC);
+		mixer[i].lm_ctl->ops.update_pending_flush_dspp(mixer[i].lm_ctl, dspp->idx,
+							       DPU_DSPP_GAMUT);
+	}
+	return 0;
+}
+
 static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 {
 	struct drm_crtc_state *state = crtc->state;
 	struct dpu_crtc_state *cstate = to_dpu_crtc_state(crtc->state);
 	struct dpu_crtc_mixer *mixer = cstate->mixers;
+	struct dpu_kms *kms = _dpu_crtc_get_kms(crtc);
+	struct dpu_kms_color *c = &kms->color;
+	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
+	const struct dpu_hw_pcc_cfg *def_pcc;
+	struct dpu_crtc_color want = {};
 	struct dpu_hw_pcc_cfg cfg;
 	struct dpu_hw_gc_lut *gc_lut;
 	struct dpu_hw_ctl *ctl;
 	struct dpu_hw_dspp *dspp;
-	const struct dpu_hw_pcc_cfg *def_pcc = _dpu_crtc_default_pcc();
-	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
-	int i;
+	int i, ret;
+
+	/* -1: userspace colour management, as in stock mainline */
+	want.mode = (state->ctm || state->gamma_lut) ? -1 : READ_ONCE(dpu_default_ctm);
+
+	mutex_lock(&c->lock);
+	want.calib = want.mode == 3 && c->loaded && !c->failed;
+	want.gen = want.calib ? c->gen : 0;
 
 	if (!state->color_mgmt_changed && !drm_atomic_crtc_needs_modeset(state) &&
-	    (state->ctm || def_pcc == dpu_crtc->applied_default_pcc))
-		return;
+	    dpu_crtc->color_applied &&
+	    want.mode == dpu_crtc->applied_color.mode &&
+	    want.calib == dpu_crtc->applied_color.calib &&
+	    want.gen == dpu_crtc->applied_color.gen)
+		goto out;
 
-	dpu_crtc->applied_default_pcc = state->ctm ? NULL : def_pcc;
+	ret = _dpu_crtc_setup_lutdma(kms, cstate, want.calib);
+	if (ret && want.calib) {
+		DPU_ERROR("colour calibration disabled, lutdma failed: %d\n", ret);
+		c->failed = true;
+		want.calib = false;
+		want.gen = 0;
+	}
+	def_pcc = want.mode < 0 ? NULL : _dpu_crtc_default_pcc(want.mode, want.calib);
 
 	for (i = 0; i < cstate->num_mixers; i++) {
 		ctl = mixer[i].lm_ctl;
@@ -899,14 +970,14 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 			continue;
 
 		if (dspp->ops.setup_pcc) {
-			if (!state->ctm && !def_pcc) {
-				dspp->ops.setup_pcc(dspp, NULL);
-			} else if (!state->ctm) {
+			if (state->ctm) {
+				_dpu_crtc_get_pcc_coeff(state, &cfg);
+				dspp->ops.setup_pcc(dspp, &cfg);
+			} else if (def_pcc) {
 				cfg = *def_pcc;
 				dspp->ops.setup_pcc(dspp, &cfg);
 			} else {
-				_dpu_crtc_get_pcc_coeff(state, &cfg);
-				dspp->ops.setup_pcc(dspp, &cfg);
+				dspp->ops.setup_pcc(dspp, NULL);
 			}
 
 			/* stage config flush mask */
@@ -915,15 +986,17 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 		}
 
 		if (dspp->ops.setup_gc) {
-			if (!state->gamma_lut) {
-				dspp->ops.setup_gc(dspp, NULL);
-			} else {
+			if (state->gamma_lut) {
 				gc_lut = kzalloc_obj(*gc_lut);
 				if (!gc_lut)
 					continue;
 				_dpu_crtc_get_gc_lut(state, gc_lut);
 				dspp->ops.setup_gc(dspp, gc_lut);
 				kfree(gc_lut);
+			} else if (want.calib) {
+				dspp->ops.setup_gc(dspp, &c->gc);
+			} else {
+				dspp->ops.setup_gc(dspp, NULL);
 			}
 
 			/* stage config flush mask */
@@ -931,6 +1004,11 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 				mixer[i].hw_dspp->idx, DPU_DSPP_GC);
 		}
 	}
+
+	dpu_crtc->applied_color = want;
+	dpu_crtc->color_applied = true;
+out:
+	mutex_unlock(&c->lock);
 }
 
 static void dpu_crtc_atomic_begin(struct drm_crtc *crtc,

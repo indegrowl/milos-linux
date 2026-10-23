@@ -24,6 +24,7 @@
 #include "dpu_rm.h"
 #include "dpu_core_perf.h"
 #include "dpu_hw_lutdma.h"
+#include "dpu_kms_color.h"
 
 #define DRMID(x) ((x) ? (x)->base.id : -1)
 
@@ -68,6 +69,7 @@ struct dpu_kms {
 	void __iomem *mmio, *vbif;
 	void __iomem *regdma;		/* optional: LUTDMA */
 	struct dpu_hw_lutdma *lutdma;	/* NULL without regdma */
+	struct dpu_kms_color color;	/* default DSPP colour calibration */
 
 	struct regulator *vdd;
 	struct regulator *mmagic;
