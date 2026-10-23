@@ -923,6 +923,25 @@ static int _dpu_crtc_setup_lutdma(struct dpu_kms *kms, struct dpu_crtc_state *cs
 	return 0;
 }
 
+/* AHB fallback when LUTDMA fails: IGC and 3D gamut off, so GC/PCC alone apply */
+static void _dpu_crtc_disable_luts(struct dpu_crtc_state *cstate)
+{
+	struct dpu_crtc_mixer *mixer = cstate->mixers;
+	int i;
+
+	for (i = 0; i < cstate->num_mixers; i++) {
+		struct dpu_hw_dspp *dspp = mixer[i].hw_dspp;
+
+		if (!dspp || !dspp->ops.disable_luts)
+			continue;
+		dspp->ops.disable_luts(dspp);
+		mixer[i].lm_ctl->ops.update_pending_flush_dspp(mixer[i].lm_ctl, dspp->idx,
+							       DPU_DSPP_IGC);
+		mixer[i].lm_ctl->ops.update_pending_flush_dspp(mixer[i].lm_ctl, dspp->idx,
+							       DPU_DSPP_GAMUT);
+	}
+}
+
 static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 {
 	struct drm_crtc_state *state = crtc->state;
@@ -953,12 +972,20 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 	    want.gen == dpu_crtc->applied_color.gen)
 		goto out;
 
-	ret = _dpu_crtc_setup_lutdma(kms, cstate, want.calib);
-	if (ret && want.calib) {
-		DPU_ERROR("colour calibration disabled, lutdma failed: %d\n", ret);
-		c->failed = true;
-		want.calib = false;
-		want.gen = 0;
+	/*
+	 * LUTDMA loads the calibration, or switches it off once after it was on.
+	 * After a failure it is left alone until a reload.
+	 */
+	if (!c->failed && (want.calib ||
+			   (dpu_crtc->color_applied && dpu_crtc->applied_color.calib))) {
+		ret = _dpu_crtc_setup_lutdma(kms, cstate, want.calib);
+		if (ret) {
+			DPU_ERROR("colour calibration disabled, lutdma failed: %d\n", ret);
+			c->failed = true;
+			want.calib = false;
+			want.gen = 0;
+			_dpu_crtc_disable_luts(cstate);
+		}
 	}
 	def_pcc = want.mode < 0 ? NULL : _dpu_crtc_default_pcc(want.mode, want.calib);
 

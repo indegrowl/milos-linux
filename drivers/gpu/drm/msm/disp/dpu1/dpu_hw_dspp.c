@@ -151,6 +151,12 @@ static int dpu_build_dspp_gamut(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbu
 				  ctx->cap->sblk->gamut.base, GAMUT_EN);
 }
 
+static void dpu_disable_dspp_luts(struct dpu_hw_dspp *ctx)
+{
+	DPU_REG_WRITE(&ctx->hw, ctx->cap->sblk->igc.base + IGC_OPMODE_OFF, 0);
+	DPU_REG_WRITE(&ctx->hw, ctx->cap->sblk->gamut.base, 0);
+}
+
 /**
  * dpu_hw_dspp_init() - Initializes the DSPP hw driver object.
  * should be called once before accessing every DSPP.
@@ -186,6 +192,8 @@ struct dpu_hw_dspp *dpu_hw_dspp_init(struct drm_device *dev,
 		c->ops.build_igc = dpu_build_dspp_igc;
 	if (c->cap->sblk->gamut.base)
 		c->ops.build_gamut = dpu_build_dspp_gamut;
+	if (c->cap->sblk->igc.base && c->cap->sblk->gamut.base)
+		c->ops.disable_luts = dpu_disable_dspp_luts;
 
 	return c;
 }

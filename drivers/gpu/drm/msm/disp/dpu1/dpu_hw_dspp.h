@@ -91,6 +91,12 @@ struct dpu_hw_dspp_ops {
 	int (*build_gamut)(struct dpu_hw_dspp *ctx, struct dpu_lutdma_cmdbuf *b,
 			   const u16 *stream);
 
+	/**
+	 * @disable_luts: switch the IGC and 3D gamut off over AHB (when LUTDMA fails)
+	 * @ctx: Pointer to dspp context
+	 */
+	void (*disable_luts)(struct dpu_hw_dspp *ctx);
+
 };
 
 /**
