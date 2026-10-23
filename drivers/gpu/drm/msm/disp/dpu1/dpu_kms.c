@@ -33,6 +33,7 @@
 #include "dpu_formats.h"
 #include "dpu_hw_vbif.h"
 #include "dpu_kms.h"
+#include "dpu_color_calib.h"
 #include "dpu_plane.h"
 #include "dpu_vbif.h"
 #include "dpu_writeback.h"
@@ -63,7 +64,27 @@ module_param(dpu_use_virtual_planes, bool, 0);
  * Wide-gamut panels such as the Nothing Phone (4a) AMOLED oversaturate sRGB content.
  */
 int dpu_default_ctm = 3;
-module_param(dpu_default_ctm, int, 0644);
+
+static int dpu_default_ctm_set(const char *val, const struct kernel_param *kp)
+{
+	int v, ret;
+
+	ret = kstrtoint(val, 0, &v);
+	if (ret)
+		return ret;
+	ret = dpu_default_ctm_check(READ_ONCE(dpu_default_ctm), v,
+				    system_state == SYSTEM_RUNNING);
+	if (ret)
+		return ret;
+	WRITE_ONCE(dpu_default_ctm, v);
+	return 0;
+}
+
+static const struct kernel_param_ops dpu_default_ctm_ops = {
+	.set = dpu_default_ctm_set,
+	.get = param_get_int,
+};
+module_param_cb(dpu_default_ctm, &dpu_default_ctm_ops, &dpu_default_ctm, 0644);
 MODULE_PARM_DESC(dpu_default_ctm,
 		 "default colour: 0=off, 1=bypass, 2=PCC fit, 3=panel calibration");
 

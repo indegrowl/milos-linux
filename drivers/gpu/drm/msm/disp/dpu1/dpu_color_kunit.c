@@ -176,7 +176,21 @@ static void gc_words(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, w[1024], ramp_gc(0, 0) | ramp_gc(0, 1) << 16);
 }
 
+static void default_ctm_check(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(3, -1, false), -EINVAL);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(3, 4, false), -EINVAL);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(0, 3, false), 0);
+	/* at runtime, 0 <-> non-zero would change the mixer topology without a modeset */
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(0, 3, true), -EBUSY);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(3, 0, true), -EBUSY);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(1, 3, true), 0);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(3, 2, true), 0);
+	KUNIT_EXPECT_EQ(test, dpu_default_ctm_check(0, 0, true), 0);
+}
+
 static struct kunit_case dpu_color_calib_cases[] = {
+	KUNIT_CASE(default_ctm_check),
 	KUNIT_CASE(parse_ok),
 	KUNIT_CASE(parse_bad_magic_len_crc),
 	KUNIT_CASE(parse_value_too_wide),

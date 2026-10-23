@@ -115,3 +115,17 @@ void dpu_color_calib_gc_words(const struct dpu_color_calib *c, u32 *c0, u32 *c1,
 			dst[ch][i] = (c->gc[ch][2 * i] & 0x3ff) |
 				     (c->gc[ch][2 * i + 1] & 0x3ff) << 16;
 }
+
+/*
+ * Whether msm.dpu_default_ctm may go from @cur to @val (0..3). Once the system
+ * is running, a switch between 0 and non-zero is refused: it changes the mixer
+ * and DSC topology, which only a modeset may do.
+ */
+int dpu_default_ctm_check(int cur, int val, bool running)
+{
+	if (val < 0 || val > 3)
+		return -EINVAL;
+	if (running && !cur != !val)
+		return -EBUSY;
+	return 0;
+}

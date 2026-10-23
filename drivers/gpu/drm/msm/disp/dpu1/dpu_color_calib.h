@@ -37,6 +37,7 @@ struct dpu_color_calib {
 int dpu_color_calib_parse(const u8 *data, size_t len, struct dpu_color_calib *out);
 void dpu_color_calib_igc_stream(const struct dpu_color_calib *c, u16 *out);
 void dpu_color_calib_gamut_stream(const struct dpu_color_calib *c, u32 layout, u16 *out);
+int dpu_default_ctm_check(int cur, int val, bool running);
 void dpu_color_calib_gc_words(const struct dpu_color_calib *c, u32 *c0, u32 *c1, u32 *c2);
 
 #endif /* _DPU_COLOR_CALIB_H */
