@@ -790,6 +790,34 @@ static int _dpu_crtc_check_and_setup_lm_bounds(struct drm_crtc *crtc,
 	return 0;
 }
 
+/*
+ * Gamma-space fit of the stock Android gamut LUT (table 0) for the 4a's BOE
+ * panel, S3.15; cfg.<out>.<in> as the PCC applies it.
+ */
+static const struct dpu_hw_pcc_cfg dpu_pcc_frogger = {
+	.r = { .r = 25745, .g = 4274, .b = 3435 },
+	.g = { .r = 1745, .g = 28992, .b = 2429 },
+	.b = { .r = 659, .g = 1664, .b = 29660 },
+};
+
+static const struct dpu_hw_pcc_cfg dpu_pcc_identity = {
+	.r = { .r = 32768 },
+	.g = { .g = 32768 },
+	.b = { .b = 32768 },
+};
+
+static const struct dpu_hw_pcc_cfg *_dpu_crtc_default_pcc(void)
+{
+	switch (READ_ONCE(dpu_default_ctm)) {
+	case 1:
+		return &dpu_pcc_identity;
+	case 2:
+		return &dpu_pcc_frogger;
+	default:
+		return NULL;
+	}
+}
+
 static void _dpu_crtc_get_pcc_coeff(struct drm_crtc_state *state,
 		struct dpu_hw_pcc_cfg *cfg)
 {
@@ -853,11 +881,15 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 	struct dpu_hw_gc_lut *gc_lut;
 	struct dpu_hw_ctl *ctl;
 	struct dpu_hw_dspp *dspp;
+	const struct dpu_hw_pcc_cfg *def_pcc = _dpu_crtc_default_pcc();
+	struct dpu_crtc *dpu_crtc = to_dpu_crtc(crtc);
 	int i;
 
-
-	if (!state->color_mgmt_changed && !drm_atomic_crtc_needs_modeset(state))
+	if (!state->color_mgmt_changed && !drm_atomic_crtc_needs_modeset(state) &&
+	    (state->ctm || def_pcc == dpu_crtc->applied_default_pcc))
 		return;
+
+	dpu_crtc->applied_default_pcc = state->ctm ? NULL : def_pcc;
 
 	for (i = 0; i < cstate->num_mixers; i++) {
 		ctl = mixer[i].lm_ctl;
@@ -867,8 +899,11 @@ static void _dpu_crtc_setup_cp_blocks(struct drm_crtc *crtc)
 			continue;
 
 		if (dspp->ops.setup_pcc) {
-			if (!state->ctm) {
+			if (!state->ctm && !def_pcc) {
 				dspp->ops.setup_pcc(dspp, NULL);
+			} else if (!state->ctm) {
+				cfg = *def_pcc;
+				dspp->ops.setup_pcc(dspp, &cfg);
 			} else {
 				_dpu_crtc_get_pcc_coeff(state, &cfg);
 				dspp->ops.setup_pcc(dspp, &cfg);
@@ -1423,7 +1458,7 @@ static struct msm_display_topology dpu_crtc_get_topology(
 	else
 		topology.num_lm = 1;
 
-	if (crtc_state->ctm || crtc_state->gamma_lut)
+	if (crtc_state->ctm || crtc_state->gamma_lut || READ_ONCE(dpu_default_ctm))
 		topology.num_dspp = topology.num_lm;
 
 	return topology;

@@ -55,6 +55,7 @@
 	ktime_compare(ktime_sub((A), (B)), ktime_set(0, 0))
 
 extern bool dpu_use_virtual_planes;
+extern int dpu_default_ctm;
 
 struct dpu_kms {
 	struct msm_kms base;

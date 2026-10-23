@@ -183,6 +183,9 @@ struct dpu_crtc {
 	struct dpu_core_perf_params cur_perf;
 
 	struct dpu_crtc_smmu_state_data smmu_state;
+
+	/* default PCC matrix last programmed while no CTM was set */
+	const struct dpu_hw_pcc_cfg *applied_default_pcc;
 };
 
 #define to_dpu_crtc(x) container_of(x, struct dpu_crtc, base)
