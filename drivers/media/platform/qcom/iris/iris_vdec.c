@@ -526,8 +526,12 @@ int iris_vdec_start_cmd(struct iris_inst *inst)
 		return -EBUSY;
 	}
 
-	/* a later LAST buffer must raise V4L2_EVENT_EOS again */
+	/*
+	 * Decoding restarts: a later drain must raise V4L2_EVENT_EOS again and,
+	 * if its LAST flag comes without a buffer, get a synthesized LAST buffer.
+	 */
 	v4l2_m2m_clear_state(inst->m2m_ctx);
+	inst->last_buffer_dequeued = false;
 
 	return iris_inst_change_sub_state(inst, clear_sub_state, 0);
 }
